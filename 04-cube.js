@@ -86,11 +86,12 @@ const cubeVertexShader = `#version 300 es
 const cubeFragmentShader = `#version 300 es
     precision mediump float;
 
+    uniform vec4 u_color;
     out vec4 FragColor;
 
     void main()
     {
-        FragColor = vec4(1.0, .2, .3, 1.0);
+        FragColor = u_color;
     }
 `
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader,)
@@ -171,6 +172,21 @@ let viewPan = 0
 let viewTilt = 0
 let cubePosition = [0, 1, 0]
 
+// Variables for movement
+let startTime = 0;
+let relativeTime = 0;
+let transformStartPos = [0, 1, 0];
+let transformEndPos = [0, -.8, 0];
+let transformPos = [0, 0, 0]
+
+function restartMovement() {
+    startTime = performance.now();
+    transformPos[0] = transformStartPos[0];
+    transformPos[1] = transformStartPos[1];
+    transformPos[2] = transformStartPos[2];
+    relativeTime = 0;
+}
+
 // gl.clearColor(0.0, 0.5, 0.0,0);                                                                                  
 
 const cubeDrawCall = glance.createDrawCall(gl, cubeShader, cubeVAO,
@@ -180,15 +196,33 @@ const cubeDrawCall = glance.createDrawCall(gl, cubeShader, cubeVAO,
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
         ), mat4.fromTranslation([0, 0, viewDist]))),
+        u_color: () => [1.0, 0.2, 0.3, 1.0],
     }
 )
 const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
     {   
-        u_modelMatrix: (cubePosition) => mat4.translate(mat4.identity(), cubePosition),
+        u_modelMatrix: () => {
+            let modelMatrix = mat4.identity();
+
+            let direction = [transformEndPos[0] - transformStartPos[0], transformEndPos[1] - transformStartPos[1], transformEndPos[2] - transformStartPos[2]];
+            let speed = 0.001; 
+
+            for (let i = 0; i < 3; i++) {
+                transformPos[i] = transformStartPos[i] + direction[i] * speed * relativeTime;
+        
+                if ((direction[i] > 0 && transformPos[i] > transformEndPos[i]) ||
+                    (direction[i] < 0 && transformPos[i] < transformEndPos[i])) {
+                    transformPos[i] = transformEndPos[i];
+                }
+            }
+            modelMatrix = mat4.translate(modelMatrix, [transformPos[0], transformPos[1], transformPos[2]]);
+            return modelMatrix;
+        },
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
         ), mat4.fromTranslation([0, 0, viewDist]))),
+        u_color: () => [0.2, 0.8, 1.0, 1.0],
     }
 ) 
   
@@ -200,6 +234,7 @@ const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
 
 setRenderLoop((time) =>
 {
+    relativeTime = time - startTime;
     // One-time WebGL setup
     // gl.enable(gl.CULL_FACE)
     gl.enable(gl.DEPTH_TEST)
@@ -224,7 +259,8 @@ onMouseWheel((e) =>
 
 onKeyDown((e) => {
     if (e.key == " ") {
-        cubePosition = [0, -0.8, 0]
+        //  cubePosition = [0, -0.8, 0]
+        restartMovement(); 
         console.log(cubePosition);
     }
 })
