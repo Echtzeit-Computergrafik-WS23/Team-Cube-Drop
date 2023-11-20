@@ -13,6 +13,8 @@ canvas.addEventListener('mousemove', (event) =>
     cursor[1] = (event.offsetY / canvas.height) * -2 + 1
 })
 
+canvas.addEventListener('pointerup', onMouseUp);
+
 function onMouseDrag(callback)
 {
     canvas.addEventListener('pointerdown', () =>
@@ -267,6 +269,20 @@ const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
 let viewDist = 4.5
 let viewPan = 0
 let viewTilt = 0
+// Variables for movement
+let startTime = 0;
+let relativeTime = 0;
+let transformStartPos = [-2, -2, 2];
+let transformEndPos = [0, 0, 0];
+let transformPos = [0, 0, 0]
+
+function restartMovement() {
+    startTime = performance.now();
+    transformPos[0] = transformStartPos[0];
+    transformPos[1] = transformStartPos[1];
+    transformPos[2] = transformStartPos[2];
+    relativeTime = 0;
+}
 
 const worldDrawCall = glance.createDrawCall(
     gl,
@@ -274,7 +290,25 @@ const worldDrawCall = glance.createDrawCall(
     worldVAO,
     {
         // uniform update callbacks
-        u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.fromRotation(0.0002 * time, [0, 1, 0])),
+        // Objekt rotation
+        u_modelMatrix: () => {
+            let modelMatrix = mat4.identity();
+
+            let direction = [transformEndPos[0] - transformStartPos[0], transformEndPos[1] - transformStartPos[1], transformEndPos[2] - transformStartPos[2]];
+            let speed = 0.001; 
+
+            for (let i = 0; i < 3; i++) {
+                transformPos[i] = transformStartPos[i] + direction[i] * speed * relativeTime;
+        
+                if ((direction[i] > 0 && transformPos[i] > transformEndPos[i]) ||
+                    (direction[i] < 0 && transformPos[i] < transformEndPos[i])) {
+                    transformPos[i] = transformEndPos[i];
+                }
+            }
+            modelMatrix = mat4.translate(modelMatrix, [transformPos[0], transformPos[1], transformPos[2]]);
+            return modelMatrix;
+        },
+        // SkyBox rotation
         u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.multiply(mat4.identity(), mat4.fromRotation(0.0002 * time, [0, 1, 0]))))),
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
@@ -316,6 +350,8 @@ const skyDrawCall = glance.createDrawCall(
 
 setRenderLoop((time) =>
 {
+    relativeTime = time - startTime;
+
     // One-time WebGL setup
     // gl.enable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST)
@@ -332,6 +368,11 @@ onMouseDrag((e) =>
     viewPan += e.movementX * -.01
     viewTilt += e.movementY * -.01
 })
+
+function onMouseUp (e)
+{
+    restartMovement();
+};
 
 onMouseWheel((e) =>
 {
