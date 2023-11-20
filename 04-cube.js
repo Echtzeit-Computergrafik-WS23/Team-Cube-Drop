@@ -154,16 +154,6 @@ const indices = [
     23, // left
 ];
 
-// const positions2 = [
-// 	-.5, -.5,
-// 	+.5, -.5,
-// 	+.0, +.5,
-// ];
-
-// const indices2 = [
-//     0, 1, 2,
-// ];
-
 const cubeIBO = glance.createIndexBuffer(gl, indices)
 
 const cubeABO = glance.createAttributeBuffer(gl, "cube-abo", positions, { a_pos: { size: 3, type: gl.FLOAT } })
