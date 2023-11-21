@@ -221,12 +221,13 @@ const skyABO = glance.createAttributeBuffer(gl, "sky-abo", glance.createSkyBoxAt
 const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO, ["a_pos"]))
 
 const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
-    "img/Skybox_Right.avif",
-    "img/Skybox_Left.avif",
-    "img/Skybox_Top.avif",
-    "img/Skybox_Bottom.avif",
-    "img/Skybox_Front.avif",
-    "img/Skybox_Back.avif",
+    "img/skyBox/FishPond/posx.jpg",//right
+    "img/skyBox/FishPond/negx.jpg",//left
+    "img/skyBox/FishPond/posy.jpg",//top
+    "img/skyBox/FishPond/negy.jpg",//bottom
+    "img/skyBox/FishPond/posz.jpg",//back
+    "img/skyBox/FishPond/negz.jpg",//front
+    
 ])
 
 // =============================================================================
