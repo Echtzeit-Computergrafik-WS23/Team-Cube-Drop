@@ -94,6 +94,51 @@ const cubeFragmentShader = `#version 300 es
         FragColor = u_color;
     }
 `
+
+const skyVertexShader = `#version 300 es
+    precision highp float;
+
+    uniform mat3 u_viewRotationMatrix;
+    uniform mat4 u_projectionMatrix;
+
+    in vec3 a_pos;
+
+    out vec3 f_texCoord;
+
+    void main() {
+        // Use the local position of the vertex as texture coordinate.
+        f_texCoord = a_pos;
+
+        // By setting Z == W, we ensure that the vertex is projected onto the
+        // far plane, which is exactly what we want for the background.
+        vec4 ndcPos = u_projectionMatrix * inverse(mat4(u_viewRotationMatrix)) * vec4(a_pos, 1.0);
+        gl_Position = ndcPos.xyww;
+    }
+`
+
+
+const skyFragmentShader = `#version 300 es
+    precision mediump float;
+
+    uniform samplerCube u_skybox;
+
+    in vec3 f_texCoord;
+
+    out vec4 FragColor;
+
+    void main() {
+        // The fragment color is simply the color of the skybox at the given
+        // texture coordinate (local coordinate) of the fragment on the cube.
+        FragColor = texture(u_skybox, f_texCoord);
+    }
+`
+
+// =============================================================================
+// Data
+// =============================================================================
+
+const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
+
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader,)
 
 const positions = [
@@ -161,6 +206,28 @@ const cubeABO = glance.createAttributeBuffer(gl, "cube-abo", positions, { a_pos:
 
 const cubeVAO = glance.createVAO(gl, "cube-vao", cubeIBO, glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos"]))
 
+// The skybox
+const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
+    u_projectionMatrix: projectionMatrix,
+    u_skybox: 0,
+})
+
+const skyIBO = glance.createIndexBuffer(gl, glance.createSkyBoxIndices())
+
+const skyABO = glance.createAttributeBuffer(gl, "sky-abo", glance.createSkyBoxAttributes(), {
+    a_pos: { size: 3, type: gl.FLOAT },
+})
+
+const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO, ["a_pos"]))
+
+const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
+    "img/Skybox_Right.avif",
+    "img/Skybox_Left.avif",
+    "img/Skybox_Top.avif",
+    "img/Skybox_Bottom.avif",
+    "img/Skybox_Front.avif",
+    "img/Skybox_Back.avif",
+])
 
 // =============================================================================
 // Draw Calls
@@ -225,6 +292,24 @@ const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
         u_color: () => [0.2, 0.8, 1.0, 1.0],
     }
 ) 
+
+const skyDrawCall = glance.createDrawCall(
+    gl,
+    skyShader,
+    skyVAO,
+    {
+        // uniform update callbacks
+        u_viewRotationMatrix: () => mat3.fromMat4(mat4.multiply(
+            mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
+            mat4.fromRotation(viewTilt, [1, 0, 0])
+        )),
+    },
+    [
+        // texture bindings
+        [0, skyCubemap],
+    ],
+    () => skyCubeMapLoaded.isComplete()
+)
   
 
  
@@ -244,6 +329,7 @@ setRenderLoop((time) =>
 
     glance.performDrawCall(gl, cubeDrawCall)
     glance.performDrawCall(gl, cubeDrawCall2, cubePosition)
+    glance.performDrawCall(gl, skyDrawCall, time)
 })
 
 onMouseDrag((e) =>
