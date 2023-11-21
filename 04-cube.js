@@ -244,7 +244,7 @@ let cubePosition = [0, 1, 0]
 let startTime = 0;
 let relativeTime = 0;
 let transformStartPos = [0, 1, 0];
-let transformEndPos = [0, -.8, 0];
+let transformEndPos = [0, 0.2, 0];
 let transformPos = [0, 0, 0]
 
 function restartMovement() {
@@ -259,7 +259,7 @@ function restartMovement() {
 
 const cubeDrawCall = glance.createDrawCall(gl, cubeShader, cubeVAO,
     {   
-        u_modelMatrix: () => mat4.translate(mat4.identity(), [0, -1, 0]), 
+        u_modelMatrix: () => mat4.translate(mat4.identity(), [0, 0, 0]), 
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
@@ -273,10 +273,10 @@ const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
             let modelMatrix = mat4.identity();
 
             let direction = [transformEndPos[0] - transformStartPos[0], transformEndPos[1] - transformStartPos[1], transformEndPos[2] - transformStartPos[2]];
-            let speed = 0.001; 
+            let speed = 0.00001; 
 
-            for (let i = 0; i < 3; i++) {
-                transformPos[i] = transformStartPos[i] + direction[i] * speed * relativeTime;
+            for (let i = 0; i < 3; i++) { //beschleunigte Bewegung hier
+                transformPos[i] = transformStartPos[i] + direction[i] * speed * relativeTime * relativeTime;
         
                 if ((direction[i] > 0 && transformPos[i] > transformEndPos[i]) ||
                     (direction[i] < 0 && transformPos[i] < transformEndPos[i])) {
