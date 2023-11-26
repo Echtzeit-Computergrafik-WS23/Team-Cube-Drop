@@ -8,7 +8,7 @@
  */
 import * as core from "./core.js";
 import * as core_patterns from "./core_patterns.js";
-// import * as dev from "./dev"
+// import * as dev from "./dev.js"
 import * as geo from "./geo.js";
 import * as math from "./math.js";
 // import * as types from "./types"

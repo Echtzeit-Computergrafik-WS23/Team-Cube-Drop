@@ -14,10 +14,11 @@ export
     createTorusKnotAttributes,
     createTorusKnotIndices,
     // createFullscreenQuad,
-    // loadObj,
+    loadObj,
 }
 import
 {
+    logWarning,
     throwError,
 } from "./dev"
 import
@@ -471,162 +472,208 @@ function createTorusKnotIndices(tubularSegments = 64, radialSegments = 8)
 // }
 
 
-// /** Loads an obj file and returns an entity. */
-// async function loadObj(
-//     { gl, path, shaders,
-//         uniforms = {},
-//         name = undefined,
-//         positionAttribute = "aPosition",
-//         normalAttribute = undefined,
-//         texCoordAttribute = undefined,
-//     }: {
-//         gl: WebGL2,
-//         path: string,
-//         shaders: Shader | Shader[],
-//         uniforms?: {
-//             [name: string]: UniformValue,
-//         },
-//         name?: string,
-//         positionAttribute?: string,
-//         normalAttribute?: string,
-//         texCoordAttribute?: string,
-//     }): Promise<Entity>
-// {
-//     // Load the OBJ file
-//     const obj = await parseObj(path)
-
-//     let positions: number[] = []
-//     let indices: number[] = []
-//     let normals: number[] = []
-//     let texCoords: number[] = []
-//     { // Expand the compressed OBJ geometry
-//         let index = 0
-//         const knownIndices: Map<string, number> = new Map()
-//         for (const multiIndex of obj.multiIndices) {
-//             const key = multiIndex.join(",")
-//             if (key in knownIndices) {
-//                 // Re-use existing vertices
-//                 indices.push(knownIndices.get(key)!)
-//             }
-//             else {
-//                 // Create a new vertex
-//                 const positionIndex = multiIndex[0] * 3
-//                 positions.push(...obj.positions.slice(positionIndex, positionIndex + 3))
-
-//                 const uvIndex = multiIndex[1] * 2
-//                 texCoords.push(...obj.texCoords.slice(uvIndex, uvIndex + 2))
-
-//                 const normalIndex = multiIndex[2] * 3
-//                 normals.push(...obj.normals.slice(normalIndex, normalIndex + 3))
-
-//                 indices.push(index)
-//                 knownIndices.set(key, index)
-//                 index++
-//             }
-//         }
-//     }
-
-//     // Define the name
-//     if (!name) {
-//         name = obj.name
-//     }
-//     logInfo(() => `Loaded OBJ '${name}' with ${positions.length / 3} vertices.`)
-
-//     // Create the interleaved vertex array.
-//     const interleaved = [positions]
-//     const quantities = [3]
-//     let stride = 3
-//     let normalOffset = 3
-//     let texCoordOffset = 3
-//     if (normalAttribute) {
-//         interleaved.push(normals)
-//         quantities.push(3)
-//         stride += 3
-//         texCoordOffset += 3
-//     }
-//     if (texCoordAttribute) {
-//         interleaved.push(texCoords)
-//         quantities.push(2)
-//         stride += 2
-//     }
-//     stride *= Float32Array.BYTES_PER_ELEMENT
-//     normalOffset *= Float32Array.BYTES_PER_ELEMENT
-//     texCoordOffset *= Float32Array.BYTES_PER_ELEMENT
-//     const vertexArray = interleaveArrays(interleaved, quantities)
-//     const data = new Float32Array(vertexArray)
-//     // TODO: the block above and below appear a lot - factor them out?
-//     // Create the vertex buffers.
-//     const vertexBuffers: { [attribute: string]: AttributeBuffer } = {}
-//     vertexBuffers[positionAttribute] = createAttributeBuffer({
-//         gl, data,
-//         numComponents: 3,
-//         stride,
-//         offset: 0,
-//     })
-//     if (normalAttribute) {
-//         vertexBuffers[normalAttribute] = createAttributeBuffer({
-//             gl, data,
-//             numComponents: 3,
-//             stride,
-//             offset: normalOffset,
-//             glBuffer: vertexBuffers[positionAttribute].glBuffer,
-//         })
-//     }
-//     if (texCoordAttribute) {
-//         vertexBuffers[texCoordAttribute] = createAttributeBuffer({
-//             gl, data,
-//             numComponents: 2,
-//             stride,
-//             offset: texCoordOffset,
-//             glBuffer: vertexBuffers[positionAttribute].glBuffer,
-//         })
-//     }
-
-//     // Create the index buffer.
-//     const indexBuffer = createIndexBuffer({ gl, indices })
-
-//     // Create the entity
-//     return createEntity({
-//         gl,
-//         name,
-//         vertexBuffers,
-//         indexBuffer,
-//         shaders,
-//         uniforms,
-//     })
-// }
+// =============================================================================
+// OBJ loading
+// =============================================================================
 
 
-// // =============================================================================
-// // Private Types
-// // =============================================================================
+/**
+ * The raw data loaded from an OBJ file.
+ * In order to resolve it into an attribute buffer, we need to expand it first
+ * using the `expandObj` function.
+ */
+type ObjData = {
+    /** Name of the object */
+    name: string
+
+    /** 3D vertex positions */
+    positions: number[]
+
+    /** 2D texture coordinates */
+    texCoords: number[]
+
+    /** 3D vertex normals */
+    normals: number[]
+
+    /** Face indices as [position, texcoord, normal] */
+    splitIndices: [number, number, number][]
+}
 
 
-// /** Information loaded from an OBJ file.
-//  * For now, we only support OBJ files with a single object as exported by Blender,
-//  * with UVs and normals and triangulated faces.
-//  */
-// type ObjData = {
-//     /** Name of the object */
-//     name: string
+/**
+ * Load and parse an OBJ file into a raw `ObjData` object.
+ * For now, we only support OBJ files with a single object as exported by Blender,
+ * with 3-D positions, 2-D UV coordiantes, normals and triangulated faces.
+ * @param text The text contents of the OBJ file.
+ * @returns A promise that resolves to the parsed OBJ data.
+ */
+function parseObj(text: string): ObjData
+{
+    // Ignore comments, materials, groups, and smooth shading
+    const ignoredLines: Set<string> = new Set(["#", "mtllib", "g", "usemtl", "s", ""])
 
-//     /** 3D vertex positions */
-//     positions: number[]
+    // Parse the OBJ contents
+    let name: string | undefined = undefined
+    const positions: ObjData["positions"] = []
+    const splitIndices: ObjData["splitIndices"] = []
+    const normals: ObjData["normals"] = []
+    const texCoords: ObjData["texCoords"] = []
+    const lines = text.split("\n")
+    for (const [index, line] of lines.entries()) {
+        const tokens = line.split(" ")
+        const type = tokens[0]
 
-//     /** Face indices */
-//     multiIndices: [number, number, number][]
+        if (ignoredLines.has(type)) {
+            continue
+        }
+        else if (type === "o") {
+            if (name === undefined) {
+                name = tokens[1]
+            }
+            else {
+                throwError(() => `Multiple object names defined in OBJ file (on line ${index})`)
+            }
+        }
+        else if (type === "v") {
+            positions.push(
+                parseFloat(tokens[1]),
+                parseFloat(tokens[2]),
+                parseFloat(tokens[3]),
+            )
+        }
+        else if (type === "vn") {
+            normals.push(
+                parseFloat(tokens[1]),
+                parseFloat(tokens[2]),
+                parseFloat(tokens[3]),
+            )
+        }
+        else if (type === "vt") {
+            texCoords.push(
+                parseFloat(tokens[1]),
+                parseFloat(tokens[2]),
+            )
+        }
+        else if (type === "f") {
+            for (let i = 1; i <= 3; i++) {
+                const face = tokens[i].split("/")
+                splitIndices.push([
+                    parseInt(face[0]) - 1, // position
+                    parseInt(face[1]) - 1, // tex coord
+                    parseInt(face[2]) - 1, // normal
+                ])
+            }
+        }
+        else {
+            logWarning(() => `Unexpected OBJ token: '${type}' on line ${index}`)
+        }
+    }
+    if (name === undefined) {
+        throwError(() => "No object name defined in OBJ file")
+    }
 
-//     /** 3D vertex normals */
-//     normals: number[]
+    return {
+        name,
+        positions,
+        texCoords,
+        normals,
+        splitIndices,
+    }
+}
 
-//     /** 2D texture coordinates */
-//     texCoords: number[]
-// }
+/**
+ * Takes a raw OBJ data object and creates an attribute, and index buffer from it.
+ * @param objData OBJ data to expand.
+ * @returns [Attributes, Indices]
+ */
+function expandObj(objData: ObjData): [Array<number>, Array<number>]
+{
+    let positions: number[] = []
+    let texCoords: number[] = []
+    let normals: number[] = []
+    let indices: number[] = []
+
+    // Expand the raw OBJ data into arrays of vertex attributes and indices.
+    let vertIdx = 0
+    const knownIndices: Map<string, number> = new Map()
+    for (const splitIndex of objData.splitIndices) {
+        const vertexKey = splitIndex.join("|")
+
+        // Detect duplicate vertices
+        const existingVertex = knownIndices.get(vertexKey)
+        if (existingVertex !== undefined) {
+            indices.push(existingVertex)
+            continue
+        }
+        const [posIdx, uvIdx, normIdx] = splitIndex
+
+        // Create a new vertex
+        const positionIndex = posIdx * 3
+        positions.push(...objData.positions.slice(positionIndex, positionIndex + 3))
+
+        const uvIndex = uvIdx * 2
+        texCoords.push(...objData.texCoords.slice(uvIndex, uvIndex + 2))
+
+        const normalIndex = normIdx * 3
+        normals.push(...objData.normals.slice(normalIndex, normalIndex + 3))
+
+        indices.push(vertIdx)
+        knownIndices.set(vertexKey, vertIdx)
+        vertIdx++
+    }
+
+    // Interleave the vertex attributes.
+    const attributes = interleaveArrays(
+        [positions, texCoords, normals],
+        [3, 2, 3],
+    )
+
+    return [attributes, indices]
+}
 
 
-// // =============================================================================
-// // Private Functions
-// // =============================================================================
+/**
+ * Data buffers loaded from an OBJ file.
+ */
+type LoadedObj = {
+    /** Name of the object as loaded from the OBJ file */
+    name: string
+
+    /** Attribute buffer with [position(3), texcoord(2), normal(3)] */
+    attributes: number[]
+
+    /** Index buffer */
+    indices: number[]
+}
+
+/**
+ * Load an OBJ file and return the vertex attributes and indices.
+ * The attributes are interleaved as [position(3), texcoord(2), normal(3)].
+ * @param path Location of the OBJ file.
+ * @returns [Attributes, Indices]
+ */
+async function loadObj(path: string): Promise<LoadedObj>
+{
+    // Load the OBJ file
+    const response = await fetch(path)
+    const text = await response.text()
+
+    // Parse the OBJ file
+    const objData = parseObj(text)
+
+    // Expand the OBJ data
+    const [attributes, indices] = expandObj(objData)
+    return {
+        name: objData.name,
+        attributes,
+        indices,
+    }
+}
+
+
+// =============================================================================
+// Private Functions
+// =============================================================================
 
 
 /** Creates a new array with the given pattern repeated the given number of times. */
@@ -700,91 +747,3 @@ function interleaveArrays(arrays: any[][], quantities: number | number[] = 1): a
 
     return interleaved
 }
-
-
-// /** Load and parse an OBJ file into a `CompressedObjGeometry` format.
-//  * @param path The path to the OBJ file.
-//  * @returns A promise that resolves to the parsed OBJ data.
-//  */
-// async function parseObj(path: string): Promise<ObjData>
-// {
-//     // Load the OBJ file
-//     const response = await fetch(path)
-//     const text = await response.text()
-
-//     // Ignore comments, materials, groups, and smooth shading
-//     const ignoredLines: Set<string> = new Set(["#", "mtllib", "g", "usemtl", "s", ""])
-
-//     // Parse the OBJ contents
-//     let name: ObjData["name"] | undefined = undefined
-//     const positions: ObjData["positions"] = []
-//     const multiIndices: ObjData["multiIndices"] = []
-//     const normals: ObjData["normals"] = []
-//     const uvs: ObjData["texCoords"] = []
-//     const lines = text.split("\n")
-//     for (const [index, line] of lines.entries()) {
-//         const tokens = line.split(" ")
-//         const type = tokens[0]
-
-//         if (ignoredLines.has(type)) {
-//             continue
-//         }
-//         else if (type === "o") {
-//             if (name === undefined) {
-//                 name = tokens[1]
-//             }
-//             else {
-//                 throwError(() => `Multiple object names defined in OBJ file (on line ${index})`)
-//             }
-//         }
-//         else if (type === "v") {
-//             positions.push(
-//                 parseFloat(tokens[1]),
-//                 parseFloat(tokens[2]),
-//                 parseFloat(tokens[3]),
-//             )
-//         }
-//         else if (type === "vn") {
-//             normals.push(
-//                 parseFloat(tokens[1]),
-//                 parseFloat(tokens[2]),
-//                 parseFloat(tokens[3]),
-//             )
-//         }
-//         else if (type === "vt") {
-//             uvs.push(
-//                 parseFloat(tokens[1]),
-//                 parseFloat(tokens[2]),
-//             )
-//         }
-//         else if (type === "f") {
-//             // Face indices contain the vertex ID, UV ID, and normal ID
-//             for (let i = 1; i <= 3; i++) {
-//                 const face = tokens[i].split("/")
-//                 multiIndices.push([
-//                     parseInt(face[0]) - 1,
-//                     parseInt(face[1]) - 1,
-//                     parseInt(face[2]) - 1,
-//                 ])
-//             }
-//         }
-//         else if (type === "s") {
-//             // Ignore smooth shading
-//             continue
-//         }
-//         else {
-//             logWarning(() => `Unexpected OBJ token: '${type}' on line ${index}`)
-//         }
-//     }
-//     if (name === undefined) {
-//         throwError(() => "No object name defined in OBJ file")
-//     }
-
-//     return {
-//         name,
-//         positions,
-//         multiIndices,
-//         normals,
-//         texCoords: uvs,
-//     }
-// }
