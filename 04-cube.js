@@ -70,29 +70,59 @@ const {
 const cubeVertexShader = `#version 300 es
     precision highp float;
 
-    in vec3 a_pos;
     uniform mat4 u_modelMatrix;
     uniform mat4 u_viewMatrix;
     uniform mat4 u_projectionMatrix;
+    uniform mat3 u_normalMatrix;
 
+    in vec3 a_pos;
+    in vec3 a_normal;
+    in vec2 a_texCoord;
 
-    void main()
-    {
+    out vec3 f_cubePos;
+    out vec3 f_normal;
+    out vec2 f_texCoord;
+
+    void main() {
+        f_cubePos = vec3(u_modelMatrix * vec4(a_pos, 1.0));
+        f_normal = u_normalMatrix * a_normal;
+        f_texCoord = a_texCoord;
         gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * vec4(a_pos, 1.0);
-        // gl_Position = vec4(a_pos, 1.0);
     }
 `
 
 const cubeFragmentShader = `#version 300 es
     precision mediump float;
 
-    uniform vec4 u_color;
+    uniform vec3 u_ambientColor;
+    uniform float u_ambientIntensity;
+    uniform vec3 u_lightPos;
+    uniform vec3 u_lightColor;
+    uniform sampler2D u_texDiffuse;
+
+    in vec3 f_cubePos;
+    in vec3 f_normal;
+    in vec2 f_texCoord;
+
     out vec4 FragColor;
 
-    void main()
-    {
-        FragColor = u_color;
-    }
+    void main() {
+
+        // texture
+        vec3 texDiffuse = texture(u_texDiffuse, f_texCoord).rgb;
+
+        // diffuse
+        vec3 normal = normalize(f_normal);
+        vec3 lightDir = normalize(u_lightPos - f_cubePos);
+        float diffuseIntensity = max(dot(normal, lightDir), 0.0);
+        vec3 diffuse = diffuseIntensity * u_lightColor * texDiffuse;
+
+        // ambient
+        vec3 ambient = u_ambientColor * u_ambientIntensity * texDiffuse;
+
+        // color
+        FragColor = vec4(ambient + diffuse, 1.0);
+}
 `
 
 const skyVertexShader = `#version 300 es
@@ -139,27 +169,145 @@ const skyFragmentShader = `#version 300 es
 
 const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
 
-const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader,)
+const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader, {
+    u_ambientIntensity: 0.1,
+    u_ambientColor: [1, 1, 1],
+    u_lightPos: [1, 10, 5],
+    u_lightColor: [1, 1, 1],
+    u_projectionMatrix: projectionMatrix,
+    u_texDiffuse: 0,
+})
 
 const positions = [
+    // Vertices
     // Front face
-    -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1, 0.1, 0.1,
+    -0.1, -0.1, 0.1,
+    0.1, -0.1, 0.1,
+    0.1, 0.1, 0.1,
+    -0.1, 0.1, 0.1,
 
     // Back face
-    -0.1, -0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, -0.1, 0.1, -0.1, -0.1,
+    -0.1, -0.1, -0.1,
+    -0.1, 0.1, -0.1,
+    0.1, 0.1, -0.1,
+    0.1, -0.1, -0.1,
 
     // Top face
-    -0.1, 0.1, -0.1, -0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
+    -0.1, 0.1, -0.1,
+    -0.1, 0.1, 0.1,
+    0.1, 0.1, 0.1,
+    0.1, 0.1, -0.1,
 
     // Bottom face
-    -0.1, -0.1, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, -0.1, -0.1, 0.1,
+    -0.1, -0.1, -0.1,
+    0.1, -0.1, -0.1,
+    0.1, -0.1, 0.1,
+    -0.1, -0.1, 0.1,
 
     // Right face
-    0.1, -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1, 0.1,
+    0.1, -0.1, -0.1,
+    0.1, 0.1, -0.1,
+    0.1, 0.1, 0.1,
+    0.1, -0.1, 0.1,
 
     // Left face
-    -0.1, -0.1, -0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, -0.1, 0.1, -0.1,
+    -0.1, -0.1, -0.1,
+    -0.1, -0.1, 0.1,
+    -0.1, 0.1, 0.1,
+    -0.1, 0.1, -0.1,
 ];
+
+const textureCoordinates = [
+    // Texture Coordinates
+    // Front face
+    0.0, 0.0,
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+
+    // Back face
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+
+    // Top face
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+    1.0, 1.0,
+
+    // Bottom face
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+
+    // Right face
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+    0.0, 0.0,
+
+    // Left face
+    0.0, 0.0,
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+];
+
+const normals = [
+    // Front face
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+    0.0, 0.0, 1.0,
+
+    // Back face
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+    0.0, 0.0, -1.0,
+
+    // Top face
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+
+    // Bottom face
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+    0.0, -1.0, 0.0,
+
+    // Right face
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+
+    // Left face
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+    -1.0, 0.0, 0.0,
+];
+
+// Combine positions, texture coordinates, and normals for each vertex
+const cubeAttributes = [];
+for (let i = 0; i < positions.length / 3; i++) {
+    cubeAttributes.push(
+        positions[i * 3],
+        positions[i * 3 + 1],
+        positions[i * 3 + 2],
+        textureCoordinates[i * 2],
+        textureCoordinates[i * 2 + 1],
+        normals[i * 3],
+        normals[i * 3 + 1],
+        normals[i * 3 + 2]
+    );
+}
 
 const indices = [
     0,
@@ -202,9 +350,23 @@ const indices = [
 
 const cubeIBO = glance.createIndexBuffer(gl, indices)
 
-const cubeABO = glance.createAttributeBuffer(gl, "cube-abo", positions, { a_pos: { size: 3, type: gl.FLOAT } })
+const cubeABO = glance.createAttributeBuffer(
+    gl,
+    "cube-abo",
+    cubeAttributes,
+    { 
+    a_pos: { size: 3, type: gl.FLOAT },
+    a_texCoord: { size: 2, type: gl.FLOAT },
+    a_normal: { size: 3, type: gl.FLOAT },
+    }
+)
 
-const cubeVAO = glance.createVAO(gl, "cube-vao", cubeIBO, glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos"]))
+const cubeVAO = glance.createVAO(gl,
+    "cube-vao",
+    cubeIBO,
+    glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos", "a_normal", "a_texCoord"]))
+
+const cubeTextureDiffuse = glance.loadTexture(gl, "img/randomBrick.jpg")
 
 // The skybox
 const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
@@ -235,7 +397,7 @@ const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
 // =============================================================================
 
 
-let viewDist = 0
+let viewDist = 4.5
 let viewPan = 0
 let viewTilt = 0
 let cubePosition = [0, 1, 0]
@@ -255,17 +417,22 @@ function restartMovement() {
     relativeTime = 0;
 }
 
-// gl.clearColor(0.0, 0.5, 0.0,0);                                                                                  
 
-const cubeDrawCall = glance.createDrawCall(gl, cubeShader, cubeVAO,
-    {   
-        u_modelMatrix: () => mat4.translate(mat4.identity(), [0, 0, 0]), 
+const cubeDrawCall = glance.createDrawCall(gl,
+    cubeShader,
+    cubeVAO,
+    {
+        // uniform update callbacks
+        u_modelMatrix: () => mat4.translate(mat4.identity(), [0, 0, 0]),
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
         ), mat4.fromTranslation([0, 0, viewDist]))),
-        u_color: () => [1.0, 0.2, 0.3, 1.0],
-    }
+    },
+    [
+        // texture bindings
+        [0, cubeTextureDiffuse],
+    ]
 )
 const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
     {   
@@ -290,8 +457,10 @@ const cubeDrawCall2 = glance.createDrawCall(gl, cubeShader, cubeVAO,
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
         ), mat4.fromTranslation([0, 0, viewDist]))),
-        u_color: () => [0.2, 0.8, 1.0, 1.0],
-    }
+    },
+    [
+        [0, cubeTextureDiffuse],
+    ]
 ) 
 
 const skyDrawCall = glance.createDrawCall(
@@ -328,7 +497,7 @@ setRenderLoop((time) =>
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-    glance.performDrawCall(gl, cubeDrawCall)
+    glance.performDrawCall(gl, cubeDrawCall, time)
     glance.performDrawCall(gl, cubeDrawCall2, cubePosition)
     glance.performDrawCall(gl, skyDrawCall, time)
 })
