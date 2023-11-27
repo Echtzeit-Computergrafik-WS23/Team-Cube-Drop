@@ -169,6 +169,43 @@ const skyFragmentShader = `#version 300 es
 
 const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
 
+// Pallet
+const {attributes: palletAttributes, indices: palletIndices} = await glance.loadObj("./obj/pallet.obj")
+
+console.log(palletAttributes);
+
+const palletShader = glance.buildShaderProgram(gl, "pallet-shader", cubeVertexShader, cubeFragmentShader, {
+    u_ambientIntensity: 0.1,
+    u_ambientColor: [1, 1, 1],
+    u_lightPos: [1, 10, 5],
+    u_lightColor: [1, 1, 1],
+    u_projectionMatrix: projectionMatrix,
+    u_texDiffuse: 0,
+})
+
+const palletIBO = glance.createIndexBuffer(gl, palletIndices)
+
+const palletABO = glance.createAttributeBuffer(
+    gl,
+    "pallet-abo",
+    palletAttributes,
+    { 
+    a_pos: { size: 3, type: gl.FLOAT },
+    a_texCoord: { size: 2, type: gl.FLOAT },
+    a_normal: { size: 3, type: gl.FLOAT },
+    }
+)
+
+const palletVAO = glance.createVAO(
+    gl,
+    "pallet-vao",
+    palletIBO,
+    glance.buildAttributeMap(palletShader, palletABO, ["a_pos", "a_normal", "a_texCoord"]
+))
+
+const palletTextureDiffuse = glance.loadTexture(gl, "img/pallet.jpg")
+
+// Cubes
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader, {
     u_ambientIntensity: 0.1,
     u_ambientColor: [1, 1, 1],
@@ -361,7 +398,8 @@ const cubeABO = glance.createAttributeBuffer(
     }
 )
 
-const cubeVAO = glance.createVAO(gl,
+const cubeVAO = glance.createVAO(
+    gl,
     "cube-vao",
     cubeIBO,
     glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos", "a_normal", "a_texCoord"]))
@@ -417,6 +455,19 @@ function restartMovement() {
     relativeTime = 0;
 }
 
+
+const palletDrawCall = glance.createDrawCall(gl, palletShader, palletVAO,
+    {
+        u_modelMatrix: () => mat4.translate(mat4.identity(), [0, -0.8, 0]),
+        u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
+            mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
+            mat4.fromRotation(viewTilt, [1, 0, 0])
+        ), mat4.fromTranslation([0, 0, viewDist]))),
+    },
+    [
+        [0, palletTextureDiffuse],
+    ]
+)
 
 const cubeDrawCall = glance.createDrawCall(gl,
     cubeShader,
@@ -497,6 +548,7 @@ setRenderLoop((time) =>
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
+    glance.performDrawCall(gl, palletDrawCall, time)
     glance.performDrawCall(gl, cubeDrawCall, time)
     glance.performDrawCall(gl, cubeDrawCall2, cubePosition)
     glance.performDrawCall(gl, skyDrawCall, time)
