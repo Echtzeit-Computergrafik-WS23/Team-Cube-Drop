@@ -170,18 +170,17 @@ const skyFragmentShader = `#version 300 es
 const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
 
 // Pallet
-const {attributes: palletAttributes, indices: palletIndices} = await glance.loadObj("./obj/pallet.obj")
-
-console.log(palletAttributes);
 
 const palletShader = glance.buildShaderProgram(gl, "pallet-shader", cubeVertexShader, cubeFragmentShader, {
-    u_ambientIntensity: 0.1,
+    u_ambientIntensity: 1,
     u_ambientColor: [1, 1, 1],
     u_lightPos: [1, 10, 5],
     u_lightColor: [1, 1, 1],
     u_projectionMatrix: projectionMatrix,
     u_texDiffuse: 0,
 })
+
+const {attributes: palletAttributes, indices: palletIndices} = await glance.loadObj("./obj/pallet.obj")
 
 const palletIBO = glance.createIndexBuffer(gl, palletIndices)
 
@@ -543,6 +542,7 @@ setRenderLoop((time) =>
     relativeTime = time - startTime;
     // One-time WebGL setup
     // gl.enable(gl.CULL_FACE)
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LEQUAL)
 
