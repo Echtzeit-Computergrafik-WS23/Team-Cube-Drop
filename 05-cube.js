@@ -569,7 +569,7 @@ onKeyDown((e) => {
                     // uniform update callbacks
                     u_modelMatrix: (time) => {
                         if (newCube.position[1] == 1.5) {
-                            newCube.position[0] = moveRange * Math.sin(time * moveSpeed);
+                            newCube.position[0] = moveRange * Math.sin(time * moveSpeed * count);
                         }
                         return mat4.translate(mat4.identity(), newCube.position);
                     },
