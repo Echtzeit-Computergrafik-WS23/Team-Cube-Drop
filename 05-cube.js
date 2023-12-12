@@ -581,9 +581,16 @@ onKeyDown((e) => {
                 ]
             )
             
+            function calculateDistance(point1, point2) {
+                const dx = point1[0] - point2[0];
+                const dy = point1[1] - point2[1];
+                const dz = point1[2] - point2[2];
+                return [dx, dy, dz];
+            }
 
 
             setTimeout(() => {
+                let previousCubeEndPosition = [0, 0, 0];
                 for (let i = 0; i < tower.length; i++) {
                     let cube = tower[i]
                     if (tower.length - 1 === i) break;
@@ -593,13 +600,26 @@ onKeyDown((e) => {
                         cube.position,
                         1,
                         startValue,
-                        endValue - 0.4, 
+                        endValue -.3 , 
                         100,
                         () => {
                             startValue = endValue
                         }
                     )
+                    if (i > 0) {
+                        previousCubeEndPosition = [...tower[i - 1].position];
+                    }
+                
+                    if (i > 0) {
+                        const distance = calculateDistance(previousCubeEndPosition, cube.position);
+                
+                        if (distance[0] > 0.35 || distance[0] < -0.35) {
+                            // Lade die Seite neu
+                            location.reload();
+                        }
+                    }
                 }
+
                 tower.shift();
             }, 500)
 
