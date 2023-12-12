@@ -5,6 +5,9 @@
 const canvas = document.getElementById('canvas')
 const gl = canvas.getContext('webgl2')
 
+const playerCount = document.getElementById('playerCount');
+let count = 0;
+
 // Add mouse move event handlers to the canvas to update the cursor[] array.
 const cursor = [0, 0]
 canvas.addEventListener('mousemove', (event) =>
@@ -613,13 +616,13 @@ onKeyDown((e) => {
                     if (i > 0) {
                         const distance = calculateDistance(previousCubeEndPosition, cube.position);
                 
-                        if (distance[0] > 0.35 || distance[0] < -0.35) {
-                            // Lade die Seite neu
+                        if (distance[0] > 0.4 || distance[0] < -0.4) {
                             location.reload();
                         }
                     }
                 }
-
+                count += 1;
+                playerCount.innerHTML = count;
                 tower.shift();
             }, 500)
 
