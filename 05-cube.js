@@ -395,7 +395,9 @@ const cubeVAO = glance.createVAO(
     glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos", "a_normal", "a_texCoord"]
 ))
 
-const cubeTextureDiffuse = glance.loadTexture(gl, "img/randomBrick.jpg")
+const cubeTextureDiffuse = await glance.loadTextureNow(gl, "./img/randomBrick.jpg", {
+    wrap: gl.REPEAT,
+});
 
 // The skybox
 const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
@@ -411,7 +413,7 @@ const skyABO = glance.createAttributeBuffer(gl, "sky-abo", glance.createSkyBoxAt
 
 const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO, ["a_pos"]))
 
-const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
+const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", 1024, 1024,[
     "img/skyBox/FishPond/negx.jpg",//left
     "img/skyBox/FishPond/posx.jpg",//right
     "img/skyBox/FishPond/posy.jpg",//top
@@ -441,24 +443,6 @@ let tower = [
         position: [0, 1.5 , 0],
     },
 ]
-
-const test = true;
-
-// Variables for movement
-// let startTime = 0;
-// let relativeTime = 0;
-// let transformStartPos = [0, 1, 0];
-// let transformEndPos = [0, 0.2, 0];
-// let transformPos = [0, 0, 0]
-
-// function restartMovement() {
-//     startTime = performance.now();
-//     transformPos[0] = transformStartPos[0];
-//     transformPos[1] = transformStartPos[1];
-//     transformPos[2] = transformStartPos[2];
-//     relativeTime = 0;
-// }
-
 
 for (let i = 0; i < tower.length; i++) {
     let cube = tower[i]

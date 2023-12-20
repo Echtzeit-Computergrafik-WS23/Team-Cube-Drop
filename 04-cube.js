@@ -202,7 +202,7 @@ const palletVAO = glance.createVAO(
     glance.buildAttributeMap(palletShader, palletABO, ["a_pos", "a_normal", "a_texCoord"]
 ))
 
-const palletTextureDiffuse = glance.loadTexture(gl, "img/pallet.jpg")
+const palletTextureDiffuse = glance.loadTexture(gl, 1024, 1024, "img/pallet.jpg")
 
 // Cubes
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", cubeVertexShader, cubeFragmentShader, {
@@ -403,7 +403,7 @@ const cubeVAO = glance.createVAO(
     cubeIBO,
     glance.buildAttributeMap(cubeShader, cubeABO, ["a_pos", "a_normal", "a_texCoord"]))
 
-const cubeTextureDiffuse = glance.loadTexture(gl, "img/randomBrick.jpg")
+const cubeTextureDiffuse = glance.loadTexture(gl, 1024, 1024, "img/randomBrick.jpg")
 
 // The skybox
 const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
@@ -419,7 +419,7 @@ const skyABO = glance.createAttributeBuffer(gl, "sky-abo", glance.createSkyBoxAt
 
 const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO, ["a_pos"]))
 
-const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
+const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", 1024, 1024, [
     "img/skyBox/FishPond/negx.jpg",//left
     "img/skyBox/FishPond/posx.jpg",//right
     "img/skyBox/FishPond/posy.jpg",//top
@@ -546,12 +546,13 @@ setRenderLoop((time) =>
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LEQUAL)
 
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-    glance.performDrawCall(gl, palletDrawCall, time)
-    glance.performDrawCall(gl, cubeDrawCall, time)
-    glance.performDrawCall(gl, cubeDrawCall2, cubePosition)
+    // glance.performDrawCall(gl, palletDrawCall, time)
+    // glance.performDrawCall(gl, cubeDrawCall, time)
+    // glance.performDrawCall(gl, cubeDrawCall2, cubePosition)
     glance.performDrawCall(gl, skyDrawCall, time)
+    // console.log(gl.getError());
 })
 
 onMouseDrag((e) =>
