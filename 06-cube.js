@@ -409,7 +409,7 @@ const lightSpeed = 0.0005;
 
 let tower = [
     {
-        position: [0, -1.4, 0],
+        position: [0, -1.4 , 0],
     },
     {
         position: [0, -1, 0],
