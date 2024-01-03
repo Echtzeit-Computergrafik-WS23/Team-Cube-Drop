@@ -1,4 +1,4 @@
-export { createAttributeBuffer, createDrawCall, createFragmentShader, createFramebuffer, createIndexBuffer, createRenderbuffer, createShaderProgram, createTexture, createVAO, createVertexShader, deleteShader, getContext, performDrawCall, updateTexture, 
+export { createAttributeBuffer, createDrawCall, createFragmentShader, createFramebuffer, createIndexBuffer, createRenderbuffer, createShaderProgram, createTexture, createVAO, createVertexShader, deleteShader, getContext, performDrawCall, updateFramebufferLayer, updateTexture, 
 // TODO: these should not be part of the public API per-se, but I need them
 // in the course to implement "manual" versions of the function
 setUniform, calcOffset, calcStride, getAttributeSize, };
@@ -46,9 +46,9 @@ function getContext(canvasId, options = {}) {
         throwError(() => `Could not acquire a WebGL2 context from canvas with id "${canvasId}"`);
     }
     // Test various WebGL2 extensions.
-    // if (gl.getExtension('EXT_color_buffer_float') == null) {
-    //     logWarning(() => 'EXT_color_buffer_float is not supported.');
-    // } // TODO: enable after the deferred lecture
+    if (gl.getExtension('EXT_color_buffer_float') == null) {
+        logWarning(() => 'EXT_color_buffer_float is not supported.');
+    }
     return gl;
 }
 // Vertex Buffers =========================================================== //
@@ -534,7 +534,7 @@ function isFloatFormat(internalFormat) {
  * @param target The texture target, defaults to `TEXTURE_2D`.
  * @param depth The depth of the texture, defaults to `null` for 2D and cubemap textures.
  * @param options Additional options for the texture:
- * - `useAnisotropy`: Whether to enable anisotropic filtering. Defaults to `true`.
+ * - `useAnisotropy`: Whether to enable anisotropic filtering. Defaults to `false`.
  * - `wipTextureUnit`: The texture unit to use for the WIP texture. Defaults to the highest texture unit available.
  * - `internalFormat`: The internal format of the texture. Defaults to `RGBA8`.
  * - `levels`: The number of mipmap levels to create. Defaults to the maximum possible number of levels.
@@ -582,6 +582,7 @@ function createTexture(gl, name, width, height, target = TextureTarget.TEXTURE_2
         if (options.levels !== undefined) {
             logWarning(() => `Ignoring given number of levels for ${kind} texture "${name}" because its depth is not a power of two.`);
         }
+        // TODO: I thought WebGL2 can handle non-power-of-two MIP maps?
         options.levels = 1;
     }
     else {
@@ -647,95 +648,6 @@ function createTexture(gl, name, width, height, target = TextureTarget.TEXTURE_2
                     }
                 }
             }
-            // Define the min- and magnification filter.
-            let minFilter;
-            let magFilter;
-            if (options.filter === undefined) {
-                if (options.levels > 1) {
-                    minFilter = TextureFilter.LINEAR_MIPMAP_LINEAR;
-                }
-                else {
-                    minFilter = TextureFilter.LINEAR;
-                }
-                magFilter = TextureFilter.LINEAR;
-            }
-            else if (Array.isArray(options.filter)) {
-                minFilter = options.filter[0];
-                magFilter = options.filter[1];
-            }
-            else {
-                minFilter = options.filter;
-                magFilter = options.filter;
-            }
-            if (options.levels === 1) {
-                if (![TextureFilter.NEAREST, TextureFilter.LINEAR].includes(minFilter)) {
-                    logWarning(() => `Ignoring given minification filter for ${kind} texture "${name}" because it has only one level.`);
-                    if ([TextureFilter.NEAREST_MIPMAP_NEAREST, TextureFilter.NEAREST_MIPMAP_LINEAR].includes(minFilter)) {
-                        minFilter = TextureFilter.NEAREST;
-                    }
-                    else {
-                        minFilter = TextureFilter.LINEAR;
-                    }
-                }
-            }
-            if (![TextureFilter.NEAREST, TextureFilter.LINEAR].includes(magFilter)) {
-                logWarning(() => `Ignoring given magnification filter for ${kind} texture "${name}".`);
-                if ([TextureFilter.NEAREST_MIPMAP_NEAREST, TextureFilter.NEAREST_MIPMAP_LINEAR].includes(magFilter)) {
-                    magFilter = TextureFilter.NEAREST;
-                }
-                else {
-                    magFilter = TextureFilter.LINEAR;
-                }
-            }
-            if (isFloatFormat(options.internalFormat)) {
-                if (![TextureFilter.NEAREST, TextureFilter.NEAREST_MIPMAP_NEAREST].includes(minFilter)
-                    || magFilter !== TextureFilter.NEAREST) {
-                    const extension = gl.getExtension("OES_texture_float_linear");
-                    if (extension === null) {
-                        logWarning(() => `Linear filtering for floating point textures is not supported on this system.`);
-                        minFilter = TextureFilter.NEAREST;
-                        magFilter = TextureFilter.NEAREST;
-                    }
-                }
-            }
-            gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, minFilter);
-            gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, magFilter);
-            // Define wrapping behavior.
-            let wrapS;
-            let wrapT;
-            let wrapR;
-            if (options.wrap === undefined) {
-                wrapS = TextureWrap.CLAMP_TO_EDGE;
-                wrapT = TextureWrap.CLAMP_TO_EDGE;
-                wrapR = TextureWrap.CLAMP_TO_EDGE;
-            }
-            else if (Array.isArray(options.wrap)) {
-                wrapS = options.wrap[0];
-                wrapT = options.wrap[1];
-                wrapR = options.wrap[2] ?? TextureWrap.CLAMP_TO_EDGE;
-            }
-            else {
-                wrapS = options.wrap;
-                wrapT = options.wrap;
-                wrapR = options.wrap;
-            }
-            gl.texParameteri(target, gl.TEXTURE_WRAP_S, wrapS);
-            gl.texParameteri(target, gl.TEXTURE_WRAP_T, wrapT);
-            if (target === TextureTarget.TEXTURE_CUBE_MAP) {
-                gl.texParameteri(target, gl.TEXTURE_WRAP_R, wrapR);
-            }
-            else if (Array.isArray(options.wrap) && options.wrap.length > 2) {
-                logWarning(() => `Ignoring given wrap R mode for ${kind} texture "${name}" because it has only two dimensions.`);
-            }
-            // Enable anisotropic filtering if supported and requested.
-            if (anisotropyExtension) {
-                if (target === TextureTarget.TEXTURE_CUBE_MAP) {
-                    logWarning(() => 'Anisotropic filtering is not supported for cubemap textures.');
-                }
-                else {
-                    gl.texParameterf(gl.TEXTURE_2D, anisotropyExtension.TEXTURE_MAX_ANISOTROPY_EXT, gl.getParameter(anisotropyExtension.MAX_TEXTURE_MAX_ANISOTROPY_EXT));
-                }
-            }
             // Enable depth texture comparison if requested.
             if (options.compareFunc ?? TextureCompareFunc.NONE !== TextureCompareFunc.NONE) {
                 gl.texParameteri(target, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
@@ -747,6 +659,95 @@ function createTexture(gl, name, width, height, target = TextureTarget.TEXTURE_2
             gl.texStorage3D(target, options.levels, options.internalFormat, width, height, depth);
         }
         logInfo(() => `Created ${kind} texture "${name}".`);
+        // Define the min- and magnification filter.
+        let minFilter;
+        let magFilter;
+        if (options.filter === undefined) {
+            if (options.levels > 1) {
+                minFilter = TextureFilter.LINEAR_MIPMAP_LINEAR;
+            }
+            else {
+                minFilter = TextureFilter.LINEAR;
+            }
+            magFilter = TextureFilter.LINEAR;
+        }
+        else if (Array.isArray(options.filter)) {
+            minFilter = options.filter[0];
+            magFilter = options.filter[1];
+        }
+        else {
+            minFilter = options.filter;
+            magFilter = options.filter;
+        }
+        if (options.levels === 1) {
+            if (![TextureFilter.NEAREST, TextureFilter.LINEAR].includes(minFilter)) {
+                logWarning(() => `Ignoring given minification filter for ${kind} texture "${name}" because it has only one level.`);
+                if ([TextureFilter.NEAREST_MIPMAP_NEAREST, TextureFilter.NEAREST_MIPMAP_LINEAR].includes(minFilter)) {
+                    minFilter = TextureFilter.NEAREST;
+                }
+                else {
+                    minFilter = TextureFilter.LINEAR;
+                }
+            }
+        }
+        if (![TextureFilter.NEAREST, TextureFilter.LINEAR].includes(magFilter)) {
+            logWarning(() => `Ignoring given magnification filter for ${kind} texture "${name}".`);
+            if ([TextureFilter.NEAREST_MIPMAP_NEAREST, TextureFilter.NEAREST_MIPMAP_LINEAR].includes(magFilter)) {
+                magFilter = TextureFilter.NEAREST;
+            }
+            else {
+                magFilter = TextureFilter.LINEAR;
+            }
+        }
+        if (isFloatFormat(options.internalFormat)) {
+            if (![TextureFilter.NEAREST, TextureFilter.NEAREST_MIPMAP_NEAREST].includes(minFilter)
+                || magFilter !== TextureFilter.NEAREST) {
+                const extension = gl.getExtension("OES_texture_float_linear");
+                if (extension === null) {
+                    logWarning(() => `Linear filtering for floating point textures is not supported on this system.`);
+                    minFilter = TextureFilter.NEAREST;
+                    magFilter = TextureFilter.NEAREST;
+                }
+            }
+        }
+        gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, minFilter);
+        gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, magFilter);
+        // Define wrapping behavior.
+        let wrapS;
+        let wrapT;
+        let wrapR;
+        if (options.wrap === undefined) {
+            wrapS = TextureWrap.CLAMP_TO_EDGE;
+            wrapT = TextureWrap.CLAMP_TO_EDGE;
+            wrapR = TextureWrap.CLAMP_TO_EDGE;
+        }
+        else if (Array.isArray(options.wrap)) {
+            wrapS = options.wrap[0];
+            wrapT = options.wrap[1];
+            wrapR = options.wrap[2] ?? TextureWrap.CLAMP_TO_EDGE;
+            if (target === TextureTarget.TEXTURE_2D && options.wrap.length > 2) {
+                logWarning(() => `Ignoring given wrap R mode for ${kind} texture "${name}" because it has only two dimensions.`);
+            }
+        }
+        else {
+            wrapS = options.wrap;
+            wrapT = options.wrap;
+            wrapR = options.wrap;
+        }
+        gl.texParameteri(target, gl.TEXTURE_WRAP_S, wrapS);
+        gl.texParameteri(target, gl.TEXTURE_WRAP_T, wrapT);
+        if (target !== TextureTarget.TEXTURE_2D) { // TODO: can I set the wrap mode for 2D Array Textures?
+            gl.texParameteri(target, gl.TEXTURE_WRAP_R, wrapR);
+        }
+        // Enable anisotropic filtering if supported and requested.
+        if (anisotropyExtension) {
+            if (target === TextureTarget.TEXTURE_CUBE_MAP) {
+                logWarning(() => 'Anisotropic filtering is not supported for cubemap textures.');
+            }
+            else {
+                gl.texParameterf(gl.TEXTURE_2D, anisotropyExtension.TEXTURE_MAX_ANISOTROPY_EXT, gl.getParameter(anisotropyExtension.MAX_TEXTURE_MAX_ANISOTROPY_EXT));
+            }
+        }
     }
     catch (error) {
         gl.deleteTexture(glTexture);
@@ -944,9 +945,6 @@ function createFramebuffer(gl, name, color = null, depth = null, stencil = null)
         // Check that texture attachments are valid.
         if (attachment.attachmentType == AttachmentType.TEXTURE) {
             const texture = attachment;
-            if (texture.target !== TextureTarget.TEXTURE_2D) {
-                throwError(() => `Framebuffer "${name}" has a color attachment that is not a 2D texture.`);
-            }
             if (framebufferSize === null) {
                 framebufferSize = [texture.width, texture.height];
             }
@@ -979,6 +977,55 @@ function createFramebuffer(gl, name, color = null, depth = null, stencil = null)
     if (glFramebuffer === null) {
         throwError(() => `Failed to create a new WebGL framebuffer object for "${name}".`);
     }
+    // Helper functions for creating attachments.
+    function attach(attachment, location) {
+        const kind = location === gl.DEPTH_ATTACHMENT ? "depth" : `color[${location - gl.COLOR_ATTACHMENT0}]`;
+        // Attachment is a Texture.
+        if (attachment.attachment.attachmentType === AttachmentType.TEXTURE) {
+            const texture = attachment.attachment;
+            // Attachment is a 2D Texture.
+            if (texture.target === TextureTarget.TEXTURE_2D) {
+                if ((attachment.target ?? TextureDataTarget.TEXTURE_2D) !== TextureDataTarget.TEXTURE_2D) {
+                    logWarning(() => `Ignoring the target "${attachment.target}" for ${kind} attachment of framebuffer "${name}", using 'gl.TEXTURE_2D' instead.`);
+                }
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, location, gl.TEXTURE_2D, texture.glObject, attachment.level ?? 0);
+            }
+            // Attachment is a Cube Map Texture.
+            else if (texture.target === TextureTarget.TEXTURE_CUBE_MAP) {
+                if (attachment.target === undefined) {
+                    throwError(() => `Missing target for cubemap ${kind} attachment of framebuffer "${name}".`);
+                }
+                if (!(attachment.target >= TextureDataTarget.TEXTURE_CUBE_MAP_POSITIVE_X
+                    && attachment.target <= TextureDataTarget.TEXTURE_CUBE_MAP_NEGATIVE_Z)) {
+                    throwError(() => `Invalid data target for cube map texture: ${attachment.target}.`);
+                }
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, location, attachment.target, texture.glObject, attachment.level ?? 0);
+            }
+            // Attachment is a 3D or 2D Array Texture.
+            else {
+                if (attachment.target ?? texture.target !== texture.target) {
+                    const textureTarget = texture.target === TextureTarget.TEXTURE_2D_ARRAY ? 'gl.TEXTURE_2D_ARRAY' : 'gl.TEXTURE_3D';
+                    logWarning(() => `Ignoring the target "${attachment.target}" for ${kind} attachment of framebuffer "${name}", using ${textureTarget} instead.`);
+                }
+                if (attachment.layer === undefined) {
+                    const textureKind = texture.target === TextureTarget.TEXTURE_2D_ARRAY ? "2D array" : "3D";
+                    logWarning(() => `Missing layer for ${kind} attachment (which is a ${textureKind} texture) of framebuffer "${name}", using layer 0 by default.`);
+                }
+                gl.framebufferTextureLayer(gl.FRAMEBUFFER, location, texture.glObject, attachment.level ?? 0, attachment.layer ?? 0);
+            }
+        }
+        // Attachment is a Renderbuffer.
+        else {
+            const renderbuffer = attachment.attachment;
+            if (attachment.level !== undefined) {
+                logWarning(() => `Ignoring given level ${attachment.level} for renderbuffer ${kind} attachment of framebuffer "${name}".`);
+            }
+            if (attachment.target !== undefined) {
+                logWarning(() => `Ignoring given target ${attachment.target} for renderbuffer ${kind} attachment of framebuffer "${name}".`);
+            }
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, location, gl.RENDERBUFFER, renderbuffer.glObject);
+        }
+    }
     // Define the Framebuffer.
     try {
         gl.bindFramebuffer(gl.FRAMEBUFFER, glFramebuffer);
@@ -991,87 +1038,14 @@ function createFramebuffer(gl, name, color = null, depth = null, stencil = null)
             const drawBuffers = [];
             for (let i = 0; i < colorAttachments.length; ++i) {
                 const location = gl.COLOR_ATTACHMENT0 + i;
-                const color = colorAttachments[i];
-                // Color attachment is a Texture
-                if (color.attachment.attachmentType == AttachmentType.TEXTURE) {
-                    const texture = color.attachment;
-                    // Color attachment is a 2D Texture
-                    if (texture.target === TextureTarget.TEXTURE_2D) {
-                        if ((color.target ?? TextureDataTarget.TEXTURE_2D) !== TextureDataTarget.TEXTURE_2D) {
-                            logWarning(() => `Ignoring given target ${color.target} for color attachment ${i} of framebuffer "${name}".`);
-                        }
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, location, gl.TEXTURE_2D, texture.glObject, color.level ?? 0);
-                    }
-                    // Color attachment is a Cube Map Texture
-                    else if (texture.target === TextureTarget.TEXTURE_CUBE_MAP) {
-                        if (color.target === undefined) {
-                            throwError(() => `Missing target for cubemap color attachment ${i} of framebuffer "${name}".`);
-                        }
-                        if (!(color.target >= TextureDataTarget.TEXTURE_CUBE_MAP_POSITIVE_X
-                            && color.target <= TextureDataTarget.TEXTURE_CUBE_MAP_NEGATIVE_Z)) {
-                            throwError(() => `Invalid data target for cube map texture: ${color.target}.`);
-                        }
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, location, color.target, texture.glObject, color.level ?? 0);
-                    }
-                    // 3D or 2D Array Textures are not supported (yet?).
-                    else {
-                        throwError(() => `Framebuffer "${name}" has a texture color attachment that is not a 2D texture.`);
-                    }
-                }
-                // Color attachment is a Renderbuffer
-                else {
-                    const renderbuffer = color.attachment;
-                    if (color.level !== undefined) {
-                        logWarning(() => `Ignoring given level ${color.level} for renderbuffer color attachment ${i} of framebuffer "${name}".`);
-                    }
-                    if (color.target !== undefined) {
-                        logWarning(() => `Ignoring given target ${color.target} for renderbuffer color attachment ${i} of framebuffer "${name}".`);
-                    }
-                    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, location, gl.RENDERBUFFER, renderbuffer.glObject);
-                }
+                attach(colorAttachments[i], location);
                 drawBuffers.push(location);
             }
             gl.drawBuffers(drawBuffers);
         }
         // Attach the depth attachment.
         if (depthAttachment !== null) {
-            // Depth attachment is a Texture
-            if (depthAttachment.attachment.attachmentType === AttachmentType.TEXTURE) {
-                const texture = depthAttachment.attachment;
-                // Depth attachment is a 2D Texture
-                if (texture.target === TextureTarget.TEXTURE_2D) {
-                    if ((depthAttachment.target ?? TextureDataTarget.TEXTURE_2D) !== TextureDataTarget.TEXTURE_2D) {
-                        logWarning(() => `Ignoring given target ${depthAttachment.target} for depth attachment of framebuffer "${name}".`);
-                    }
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, texture.glObject, depthAttachment.level ?? 0);
-                }
-                // Depth attachment is a Cube Map Texture
-                else if (texture.target === TextureTarget.TEXTURE_CUBE_MAP) {
-                    if (depthAttachment.target === undefined) {
-                        throwError(() => `Missing target for cubemap depth attachment of framebuffer "${name}".`);
-                    }
-                    if (!(depthAttachment.target >= TextureDataTarget.TEXTURE_CUBE_MAP_POSITIVE_X
-                        && depthAttachment.target <= TextureDataTarget.TEXTURE_CUBE_MAP_NEGATIVE_Z)) {
-                        throwError(() => `Invalid data target for cube map texture: ${depthAttachment.target}.`);
-                    }
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, depthAttachment.target, texture.glObject, depthAttachment.level ?? 0);
-                }
-                // 3D or 2D Array Textures are not supported (yet?).
-                else {
-                    throwError(() => `Framebuffer "${name}" has a texture depth attachment that is not a 2D texture.`);
-                }
-            }
-            // Depth attachment is a Renderbuffer
-            else {
-                const renderbuffer = depthAttachment.attachment;
-                if (depthAttachment.level !== undefined) {
-                    logWarning(() => `Ignoring given level ${depthAttachment.level} for renderbuffer depth attachment of framebuffer "${name}".`);
-                }
-                if (depthAttachment.target !== undefined) {
-                    logWarning(() => `Ignoring given target ${depthAttachment.target} for renderbuffer depth attachment of framebuffer "${name}".`);
-                }
-                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer.glObject);
-            }
+            attach(depthAttachment, gl.DEPTH_ATTACHMENT);
         }
         // TODO: support stencil (and depth/stencil combination) attachments
         if (stencilAttachment !== null) {
@@ -1115,6 +1089,60 @@ function createFramebuffer(gl, name, color = null, depth = null, stencil = null)
         depth: depthAttachment,
         stencil: stencilAttachment,
     };
+}
+/**
+ * Updates the layer of a 3D or 2D Array Texture attachment of a Framebuffer.
+ * Use this to render slices into a volumetric texture.
+ * @param gl The WebGL context.
+ * @param framebuffer The Framebuffer to update.
+ * @param location WebGL location constant of the attachment to update.
+ * @param layer New layer to render into.
+ * @param level (optional) Mipmap level to update, defaults to 0.
+ */
+function updateFramebufferLayer(gl, framebuffer, location, layer, level = 0) {
+    // Find the attachment at the given location.
+    let locationName;
+    let attachment;
+    switch (location) {
+        case gl.DEPTH_ATTACHMENT:
+            attachment = framebuffer.depth ?? throwError(() => `Framebuffer "${framebuffer.name}" has no depth attachment.`);
+            locationName = "depth";
+            break;
+        case gl.STENCIL_ATTACHMENT:
+            attachment = framebuffer.stencil ?? throwError(() => `Framebuffer "${framebuffer.name}" has no stencil attachment.`);
+            locationName = "stencil";
+            break;
+        default:
+            attachment = framebuffer.color[location - gl.COLOR_ATTACHMENT0] ?? throwError(() => `Framebuffer "${framebuffer.name}" has no color attachment at location ${location}.`);
+            locationName = `color[${location - gl.COLOR_ATTACHMENT0}]`;
+    }
+    // Maybe the attachment is already correct.
+    if (attachment.layer === layer && attachment.level === (level ?? attachment.level)) {
+        return;
+    }
+    // Check that the attachment is a 3D or 2D Array Texture with the correct depth.
+    if (attachment.attachment.attachmentType !== AttachmentType.TEXTURE) {
+        throwError(() => `Framebuffer "${framebuffer.name}" has no texture as its ${locationName} attachment, but a renderbuffer.`);
+    }
+    const texture = attachment.attachment;
+    if (texture.target !== TextureTarget.TEXTURE_2D_ARRAY && texture.target !== TextureTarget.TEXTURE_3D) {
+        const textureKind = texture.target === TextureTarget.TEXTURE_2D ? "2D" : "cubemap";
+        throwError(() => `Framebuffer "${framebuffer.name}" has no 3D or 2D array texture as its ${locationName} attachment, but a ${textureKind} texture.`);
+    }
+    if (layer < 0 || layer >= texture.depth) {
+        throwError(() => `Invalid layer ${layer} for ${locationName} attachment of framebuffer "${framebuffer.name}", which has a depth of ${texture.depth}.`);
+    }
+    // Keep track of the current WebGL state.
+    const currentFramebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    // Update the framebuffer.
+    try {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer.glObject);
+        gl.framebufferTextureLayer(gl.FRAMEBUFFER, location, texture.glObject, level ?? attachment.level ?? 0, layer);
+    }
+    // Always restore the WebGL state.
+    finally {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, currentFramebuffer);
+    }
 }
 // Shader =================================================================== //
 function compileWebGLShader(gl, source, stage) {
@@ -1796,7 +1824,8 @@ function attributeToGLSLType(attr) {
  * @param vao
  * @param uniforms Uniform update callbacks to update uniforms before drawing.
  */
-function createDrawCall(gl, program, vao, options = {}) {
+function createDrawCall(// TODO: add support for blending (see lecture on deferred rendering)
+gl, program, vao, options = {}) {
     // Validate the arguments.
     const uniforms = options.uniforms ?? {};
     const textures = options.textures ?? [];
@@ -1805,6 +1834,7 @@ function createDrawCall(gl, program, vao, options = {}) {
     const indexCount = options.indexCount === undefined ? vao.ibo.size : Math.ceil(options.indexCount);
     const indexOffset = options.indexOffset === undefined ? 0 : Math.ceil(options.indexOffset);
     const instanceCount = options.instanceCount === undefined ? 1 : Math.ceil(options.instanceCount);
+    const renderDepth = options.renderDepth ?? true;
     if (indexCount <= 0) {
         throwError(() => `Invalid index count: ${indexCount}.`);
     }
@@ -1869,6 +1899,7 @@ function createDrawCall(gl, program, vao, options = {}) {
         cullFace,
         depthTest,
         instanceCount,
+        renderDepth,
         enabled: options.enabled,
     };
 }
@@ -1889,6 +1920,7 @@ function performDrawCall(gl, drawCall, time) {
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(drawCall.depthTest);
     }
+    gl.depthMask(drawCall.renderDepth);
     try {
         // Update the uniforms.
         for (const [uniformName, updateCallback] of drawCall.uniforms) {
@@ -1902,7 +1934,7 @@ function performDrawCall(gl, drawCall, time) {
             if (newValue === undefined) {
                 throwError(() => `Uniform update callback for "${uniformName}" returned undefined!`);
             }
-            if (newValue === uniform.value) {
+            if (newValue == uniform.value) { // TODO: this does not seem to work for comparing matrices
                 continue; // no need to update
             }
             uniform.value = newValue;
@@ -1942,6 +1974,7 @@ function performDrawCall(gl, drawCall, time) {
     }
     // Always restore the WebGL state.
     finally {
+        gl.depthMask(true);
         gl.depthFunc(gl.ALWAYS);
         gl.disable(gl.DEPTH_TEST);
         gl.cullFace(gl.BACK);

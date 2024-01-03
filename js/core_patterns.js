@@ -1,5 +1,5 @@
 export { buildShaderProgram, buildAttributeMap, combineAttributeMaps, loadTexture, loadTextureNow, loadCubemap, loadCubemapNow, Cached, TimeSensitive, FramebufferStack, };
-import { TextureDataTarget, TextureTarget, } from "./types.js";
+import { TextureDataTarget, TextureInternalFormat, TextureTarget, } from "./types.js";
 import { throwError, shallowCopy, } from "./dev.js";
 import { createFragmentShader, createShaderProgram, createTexture, createVertexShader, updateTexture, deleteShader, } from "./core.js";
 // Attribute ================================================================= //
@@ -114,6 +114,7 @@ class CubeMapStatus {
  * - `filter`: Texture (min/mag) filter(s), defaults to (tri-)linear filtering.
  * - `wrap`: Texture wrap mode(s), defaults to `TextureWrap.CLAMP_TO_EDGE`.
  * - `flipY`: Whether to flip the image vertically, defaults to `true`.
+ * - `format`: Texture internal format, defaults to `TextureInternalFormat.RGBA8`.
  * @returns The created texture.
  */
 function loadTexture(gl, width, height, url, options = {}) {
@@ -121,9 +122,10 @@ function loadTexture(gl, width, height, url, options = {}) {
     const target = options.target ?? TextureTarget.TEXTURE_2D;
     const texture = createTexture(gl, name, width, height, target, null, {
         levels: options.createMipMaps ? undefined : 1,
-        useAnisotropy: options.useAnisotropy,
+        useAnisotropy: options.useAnisotropy ?? true,
         filter: options.filter,
         wrap: options.wrap,
+        internalFormat: options.format ?? TextureInternalFormat.RGBA8,
     });
     let image = new Image();
     image.onload = () => {
@@ -150,6 +152,7 @@ function loadTexture(gl, width, height, url, options = {}) {
  * - `filter`: Texture (min/mag) filter(s), defaults to (tri-)linear filtering.
  * - `wrap`: Texture wrap mode(s), defaults to `TextureWrap.CLAMP_TO_EDGE`.
  * - `flipY`: Whether to flip the image vertically, defaults to `true`.
+ * - `format`: Texture internal format, defaults to `TextureInternalFormat.RGBA8`.
  * @returns The created texture.
  */
 function loadTextureNow(gl, url, options = {}) {
@@ -160,9 +163,10 @@ function loadTextureNow(gl, url, options = {}) {
         image.onload = () => {
             const texture = createTexture(gl, name, image.naturalWidth, image.naturalHeight, target, null, {
                 levels: options.createMipMaps ? undefined : 1,
-                useAnisotropy: options.useAnisotropy,
+                useAnisotropy: options.useAnisotropy ?? true,
                 filter: options.filter,
                 wrap: options.wrap,
+                internalFormat: options.format ?? TextureInternalFormat.RGBA8,
             });
             updateTexture(gl, texture, image, {
                 flipY: options.flipY ?? true,
@@ -311,51 +315,81 @@ function getFramebufferSize(framebuffer) {
  * If the stack is empty, the default framebuffer is bound.
  */
 class FramebufferStack {
-    /** The stack of framebuffers. */
+    /**
+     * The stack of framebuffers.
+     * The first buffer is the read buffer, the second buffer is the draw buffer.
+     * The draw buffer can be explicitly set to `null` to write to the default framebuffer.
+     * If the draw buffer is undefined, the read buffer is also used as the draw buffer.
+     */
     _stack = [];
     /**
      * Pushes the given framebuffer onto the stack and binds it.
      * @param gl The WebGL2 context.
      * @param framebuffer The framebuffer to push.
+     *  Is only used as the read buffer if `drawBuffer` is defined.
+     * @param drawBuffer The framebuffer to draw into.
+     *  Can be explicitly set to `null` to write to the default framebuffer.
+     *  Undefined by default, which means that the `framebuffer` is bound as both
+     *  the read and draw framebuffer.
      */
-    push(gl, framebuffer) {
-        // If the given framebuffer is already bound, do nothing.
-        if (this._stack.at(-1) === framebuffer) {
+    push(gl, framebuffer, drawBuffer) {
+        // Passing the same framebuffer as read and draw buffer is the same as passing
+        // only a single framebuffer.
+        if (drawBuffer === framebuffer) {
+            drawBuffer = undefined;
+        }
+        // If the given framebuffer setup is already bound, do nothing.
+        const [currentReadBuffer, currentDrawBuffer] = this._stack.at(-1) ?? [null, undefined];
+        if (currentReadBuffer === framebuffer && currentDrawBuffer === drawBuffer) {
             return;
         }
         // Push the given framebuffer onto the stack.
-        this._stack.push(framebuffer);
+        this._stack.push([framebuffer, drawBuffer]);
+        // Bind the new framebuffer and set the viewport.
         try {
-            // Bind the new framebuffer and set the viewport.
-            const [width, height] = getFramebufferSize(framebuffer);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer.glObject);
-            gl.viewport(0, 0, width, height);
+            this._bindFramebuffer(gl, framebuffer, drawBuffer);
         }
+        // If an error occurs, pop the framebuffer from the stack and re-throw the error.
         catch (e) {
-            // If an error occurs, pop the framebuffer from the stack and re-throw the error.
             this.pop(gl);
             throw e;
         }
-    }
+    } // TODO: this design does not allow one to read from the default framebuffer
     /**
      * Pops the top framebuffer from the stack and binds the previous framebuffer.
      * If the stack is empty, the default framebuffer is bound.
      * @param gl The WebGL2 context.
+     * @param count Number of framebuffers to pop, defaults to 1.
      */
-    pop(gl) {
-        // Remove the top framebuffer from the stack.
-        this._stack.pop();
-        // Bind the previous framebuffer, or the default framebuffer if the stack is empty.
-        // Any error doing so is not recoverable, so we do not try to handle it.
-        const previousFramebuffer = this._stack.at(-1);
-        if (previousFramebuffer) {
-            const [width, height] = getFramebufferSize(previousFramebuffer);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer.glObject);
+    pop(gl, count = 1) {
+        count = Math.max(0, count);
+        for (let i = 0; i < count; i++) {
+            // Remove the top framebuffer from the stack.
+            this._stack.pop();
+            // Bind the previous framebuffer, or the default framebuffer if the stack is empty.
+            // Any error doing so is not recoverable, so we do not try to handle it.
+            const [previousReadBuffer, previousDrawBuffer] = this._stack.at(-1) ?? [null, undefined];
+            this._bindFramebuffer(gl, previousReadBuffer, previousDrawBuffer);
+        }
+    }
+    /** Bind the new framebuffer and set the viewport. */
+    _bindFramebuffer(gl, readBuffer, drawBuffer) {
+        // No separate read and draw buffers.
+        if (drawBuffer === undefined) {
+            const [width, height] = readBuffer === null
+                ? [gl.canvas.width, gl.canvas.height]
+                : getFramebufferSize(readBuffer);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, readBuffer?.glObject ?? null);
             gl.viewport(0, 0, width, height);
         }
+        // Separate read and draw buffers.
         else {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+            const [width, height] = drawBuffer === null
+                ? [gl.canvas.width, gl.canvas.height]
+                : getFramebufferSize(drawBuffer);
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readBuffer?.glObject ?? null);
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, drawBuffer?.glObject ?? null);
+            gl.viewport(0, 0, width, height);
         }
     }
 }

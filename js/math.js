@@ -740,5 +740,6 @@ const mat4 = {
         }
         return true;
     }
+    // TODO: mat4.fromMat3
 };
 Object.freeze(mat4);

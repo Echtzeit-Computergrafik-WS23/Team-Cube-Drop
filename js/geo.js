@@ -81,6 +81,8 @@ function createPlaneIndices(widthSegments = 1, depthSegments = 1) {
     return indices;
 }
 // TODO: All parameters should be optional, none of this mixing of undefined and default values as in createBoxAttributes
+// TODO: Parameters that default to true are not great, because you have to list them to NOT use them
+// TODO: take size of cube as single number or array of 3
 /**
  * Creates attributes for a box with the given options.
  * @param width The width of the box. Defaults to 1.
@@ -425,13 +427,23 @@ function createTorusKnotIndices(tubularSegments = 64, radialSegments = 8) {
 /**
  * Create 2D-position and texcoord attributes for a fullscreen quad.
  */
-function createQuadAttributes() {
-    return [
-        -1, -1, 0, 0,
-        -1, +1, 0, 1,
-        +1, +1, 1, 1,
-        +1, -1, 1, 0,
-    ];
+function createQuadAttributes(options = {}) {
+    if (options.uvs ?? true) {
+        return [
+            -1, -1, 0, 0,
+            -1, +1, 0, 1,
+            +1, +1, 1, 1,
+            +1, -1, 1, 0,
+        ];
+    }
+    else {
+        return [
+            -1, -1,
+            -1, +1,
+            +1, +1,
+            +1, -1,
+        ];
+    }
 }
 /**
  * Create indices for a fullscreen quad.
