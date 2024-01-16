@@ -31,20 +31,22 @@
         .backgroundImg {
             height: 100vh; 
             width: 100vw;
+            max-width: 540px;
             position: absolute;
             transition: background-position 0.2s;
             background: url("./img/landscapetest.jpg");
             background-position: 0 0;
+            background-repeat: no-repeat;
         }
     </style>
 </head>
 
 <body>
     <div id="placer">
-        <div class="backgroundImg"> </div>
         <div style="color:beige; display: flex;">
-            <p>Number: </p><p id="playerCount">0</p>
+            <p id="playerCount">0</p>
         </div>
+        <div class="backgroundImg"> </div>
         <canvas id="canvas" width=540 height=1080></canvas>
     </div>
 </body>

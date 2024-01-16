@@ -368,11 +368,11 @@ const shadowFragmentShader = `#version 300 es
 const cameraProjection = mat4.perspective(Math.PI / 4, 540 / 1080, 0.1, 14);
 
 // left, right, bottom, top, near, and far clipping planes
-const lightProjection = mat4.ortho(-1.43, 1.43, -0.55, 1.2, -0.5, 2.2);
+const lightProjection = mat4.ortho(-2, 2, -1, 1.4, -0.5, 5);
 const textureLightProjection = mat4.multiply(
     mat4.multiply(
         mat4.fromTranslation([0.5, 0.5, 0.5]),
-        mat4.fromScaling([0.5, 0.5, 0.5]),
+        mat4.fromScaling([.5, .5, .5]),
     ),
     lightProjection,
 );
@@ -391,9 +391,9 @@ const solidShader = glance.buildShaderProgram(gl, "floor-shader", solidVertexSha
 });
 
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", solidVertexShader, solidFragmentShader, {
-    u_ambient: 0.2,
-    u_specular: 0.2,
-    u_shininess: 32,
+    u_ambient: 0.4,
+    u_specular: 0.4,
+    u_shininess: 16,
     u_lightColor: [1, 1, 1],
     u_cameraProjection: cameraProjection,
     u_lightProjection: textureLightProjection,
@@ -945,8 +945,6 @@ onKeyDown((e) =>
                         () => {
                         }
                     )
-                    //TODO add .3 and then move it down
-                    // floorPosition[1] = -.9;
                     if (i > 0) {
                         previousCubeEndPosition = [...tower[i - 1].position];
                     }
