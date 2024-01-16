@@ -14,6 +14,13 @@ let yOffset = 0;
 
 let count = 0;
 
+// Set the maximum rotation values for the camera.
+const MAX_PAN = Math.PI / 8;
+const MIN_PAN = -Math.PI / 8;
+const MAX_TILT = Math.PI / 8;
+const MIN_TILT = -Math.PI / 8;
+
+
 // Add mouse move event handlers to the canvas to update the cursor[] array.
 const cursor = [0, 0];
 canvas.addEventListener('mousemove', (event) =>
@@ -800,6 +807,10 @@ onMouseDrag((e) =>
 {
     viewPan += e.movementX * -.01;
     viewTilt += e.movementY * -.01;
+
+    viewPan = Math.max(Math.min(viewPan, MAX_PAN), MIN_PAN);
+    viewTilt = Math.max(Math.min(viewTilt, MAX_TILT), MIN_TILT);
+
     viewRotation.setDirty();
 });
 
@@ -991,6 +1002,9 @@ setRenderLoop((time) =>
     if (panDelta != 0 || tiltDelta != 0) {
         viewPan += panDelta * .02;
         viewTilt += tiltDelta * .02;
+
+        viewPan = Math.max(Math.min(viewPan, MAX_PAN), MIN_PAN);
+        viewTilt = Math.max(Math.min(viewTilt, MAX_TILT), MIN_TILT);
         viewRotation.setDirty();
     }
 
