@@ -6,9 +6,12 @@ console.log('Hello, WebGL!');
 // Get the WebGL context
 const canvas = document.getElementById('canvas');
 const body = document.querySelector('body');
-const gl = canvas.getContext('webgl2');
+const gl = canvas.getContext('webgl2', {alpha: true});
 
 const playerCount = document.getElementById('playerCount');
+var backgroundImgElement = document.querySelector(".backgroundImg");
+let yOffset = 0;
+
 let count = 0;
 
 // Add mouse move event handlers to the canvas to update the cursor[] array.
@@ -958,6 +961,9 @@ onKeyDown((e) =>
                 }
                 count += 1;
                 playerCount.innerHTML = count;
+
+                yOffset += 50;
+                backgroundImgElement.style.backgroundPosition = `0 ${yOffset}px`;
                 tower.shift();
             }, 500)
         }, 1000)
@@ -1013,7 +1019,7 @@ setRenderLoop((time) =>
             glance.performDrawCall(gl, cube.drawCall, time);
         }
         // glance.performDrawCall(gl, floorDrawCall, time);
-        glance.performDrawCall(gl, skyDrawCall, time);
+        // glance.performDrawCall(gl, skyDrawCall, time);
         updateFloor(floorPosition);
     }
 });
