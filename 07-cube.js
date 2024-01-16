@@ -132,6 +132,7 @@ const solidVertexShader = `#version 300 es
     uniform mat4 u_viewXform;
     uniform mat4 u_cameraProjection;
     uniform vec3 u_viewPos;
+    uniform mat4 u_modelMatrix;
 
     in mat4 a_modelMatrix;
     in vec3 a_pos;
@@ -153,7 +154,7 @@ const solidVertexShader = `#version 300 es
         mat3 tbn = transpose(mat3(tangent, bitangent, normal));
 
         // Transform world space coords to light space
-        vec4 worldSpace = a_modelMatrix * vec4(a_pos, 1.0);
+        vec4 worldSpace = u_modelMatrix * vec4(a_pos, 1.0);
         f_posLightSpace = u_lightProjection * u_lightXform * worldSpace;
 
         // Transform world space coords to tangent space
@@ -410,38 +411,6 @@ const cubeShader = glance.buildShaderProgram(gl, "cube-shader", solidVertexShade
     u_texShadow: 3,
 });
 
-
-// Floor -----------------------------------------------------------------------
-
-let floorPosition = [0, -.9, 0];
-
-const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices());
-
-const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlaneAttributes(1, 1, { tangents: true }), {
-    a_pos: { size: 3, type: gl.FLOAT },
-    a_normal: { size: 3, type: gl.FLOAT },
-    a_texCoord: { size: 2, type: gl.FLOAT },
-    a_tangent: { size: 3, type: gl.FLOAT },
-});
-
-let floorModelMatrix = mat4.rotate(mat4.fromTranslation([0, -0.5, 0]), Math.PI / 2, [-1, 0, 0]);
-const floorNormalMatrix = mat3.fromMat4(floorModelMatrix);
-const floorInstanceAttributes = new Float32Array([...floorModelMatrix, ...floorNormalMatrix]);
-const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
-    a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-    a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-});
-
-const floorVAO = glance.createVAO(
-    gl,
-    "floor-vao",
-    floorIBO,
-    glance.buildAttributeMap(solidShader, [floorABO, floorIABO]),
-);
-const floorTextureDiffuse = await glance.loadTextureNow(gl, "./img/Rockwall_Diffuse.jpg");
-const floorTextureSpecular = await glance.loadTextureNow(gl, "./img/Rockwall_Specular.jpg");
-const floorTextureNormal = await glance.loadTextureNow(gl, "./img/Rockwall_Normal.jpg");
-
 // Cube ------------------------------------------------------------------------
 
 const { attributes: cubeAttr, indices: cubeIdx } = await glance.loadObj("./obj/wooden_box.obj", { tangents: true });
@@ -454,22 +423,6 @@ const cubeABO = glance.createAttributeBuffer(gl, "cube-abo", cubeAttr, {
     a_normal: { size: 3, type: gl.FLOAT },
     a_tangent: { size: 3, type: gl.FLOAT },
 });
-
-// const cubeModelMatrix = mat4.scale(mat4.fromTranslation([0, -0.3, 0]), [.4, .4, .4]);
-// const cubeNormalMatrix = mat3.fromMat4(cubeModelMatrix);
-// const cubeInstanceAttributes = new Float32Array([...cubeModelMatrix, ...cubeNormalMatrix]);
-// const cubeIABO = glance.createAttributeBuffer(gl, "cube-iabo", cubeInstanceAttributes, {
-//     a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-//     a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-// });
-
-// const cubeVAO = glance.createVAO(
-//     gl,
-//     "cube-vao",
-//     cubeIBO,
-//     glance.buildAttributeMap(solidShader, [cubeABO, cubeIABO])
-// );
-
 
 const cubeTextureDiffuse = await glance.loadTextureNow(
     gl,
@@ -598,6 +551,65 @@ const lightXform = new glance.TimeSensitive(
     )
 );
 
+// Floor -----------------------------------------------------------------------
+
+let floor = {
+    position: [0, -.9, 0],
+    floorModelMatrix: null,
+    floorVAO: null,
+    drawCall: null,
+}
+
+const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices());
+
+const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlaneAttributes(1, 1, { tangents: true }), {
+    a_pos: { size: 3, type: gl.FLOAT },
+    a_normal: { size: 3, type: gl.FLOAT },
+    a_texCoord: { size: 2, type: gl.FLOAT },
+    a_tangent: { size: 3, type: gl.FLOAT },
+});
+
+floor.floorModelMatrix = mat4.rotate(mat4.fromTranslation(floor.position), Math.PI / 2, [-1, 0, 0]);
+const floorNormalMatrix = mat3.fromMat4(floor.floorModelMatrix);
+const floorInstanceAttributes = new Float32Array([...floor.floorModelMatrix, ...floorNormalMatrix]);
+const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
+    a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
+    a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
+});
+
+floor.floorVAO = glance.createVAO(
+    gl,
+    "floor-vao",
+    floorIBO,
+    glance.buildAttributeMap(solidShader, [floorABO, floorIABO]),
+);
+const floorTextureDiffuse = await glance.loadTextureNow(gl, "./img/Rockwall_Diffuse.jpg");
+const floorTextureSpecular = await glance.loadTextureNow(gl, "./img/Rockwall_Specular.jpg");
+const floorTextureNormal = await glance.loadTextureNow(gl, "./img/Rockwall_Normal.jpg");
+
+floor.drawCall = glance.createDrawCall(
+    gl,
+    solidShader,
+    floor.floorVAO,
+    {
+        uniforms: {
+            u_modelMatrix: () => mat4.rotate(mat4.translate(mat4.identity(), floor.position), Math.PI / 2, [-1, 0, 0]),
+            u_lightXform: (time) => lightXform.getAt(time),
+            u_invLightRotation: (time) => invLightRotation.getAt(time),
+            u_viewXform: () => invViewXform.get(),
+            u_viewPos: () => vec3.transformMat4(vec3.zero(), viewXform.get()),
+        },
+        textures: [
+            [0, floorTextureDiffuse],
+            [1, floorTextureSpecular],
+            [2, floorTextureNormal],
+            [3, shadowDepthTexture],
+        ],
+        cullFace: gl.BACK,
+        depthTest: gl.LESS,
+    }
+);
+
 // Beauty ----------------------------------------------------------------------
 
 let tower = [
@@ -648,6 +660,7 @@ function updateCube(cube) {
         cube.cubeVAO,
         {
             uniforms: {
+                u_modelMatrix: () => mat4.scale(mat4.translate(mat4.identity(), cube.position), [.4, .4, .4]), 
                 u_lightXform: (time) => lightXform.getAt(time),
                 u_invLightRotation: (time) => invLightRotation.getAt(time),
                 u_viewXform: () => invViewXform.get(),
@@ -666,68 +679,6 @@ function updateCube(cube) {
     cube.drawCall = cubeDrawCall
 }
 
-const floorDrawCall = glance.createDrawCall(
-    gl,
-    solidShader,
-    floorVAO,
-    {
-        uniforms: {
-            u_lightXform: (time) => lightXform.getAt(time),
-            u_invLightRotation: (time) => invLightRotation.getAt(time),
-            u_viewXform: () => invViewXform.get(),
-            u_viewPos: () => vec3.transformMat4(vec3.zero(), viewXform.get()),
-        },
-        textures: [
-            [0, floorTextureDiffuse],
-            [1, floorTextureSpecular],
-            [2, floorTextureNormal],
-            [3, shadowDepthTexture],
-        ],
-        cullFace: gl.BACK,
-        depthTest: gl.LESS,
-    }
-);
-
-const updateFloor = (floorPosition) => {
-    let floorModelMatrix = mat4.rotate(mat4.fromTranslation([0, floorPosition[1], 0]), Math.PI / 2, [-1, 0, 0]);
-    const floorNormalMatrix = mat3.fromMat4(floorModelMatrix);
-    const floorInstanceAttributes = new Float32Array([...floorModelMatrix, ...floorNormalMatrix]);
-    const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
-        a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-        a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-    });
-    
-    const floorVAO = glance.createVAO(
-        gl,
-        "floor-vao",
-        floorIBO,
-        glance.buildAttributeMap(solidShader, [floorABO, floorIABO]),
-    );
-
-    const floorDrawCall = glance.createDrawCall(
-        gl,
-        solidShader,
-        floorVAO,
-        {
-            uniforms: {
-                u_lightXform: (time) => lightXform.getAt(time),
-                u_invLightRotation: (time) => invLightRotation.getAt(time),
-                u_viewXform: () => invViewXform.get(),
-                u_viewPos: () => vec3.transformMat4(vec3.zero(), viewXform.get()),
-            },
-            textures: [
-                [0, floorTextureDiffuse],
-                [1, floorTextureSpecular],
-                [2, floorTextureNormal],
-                [3, shadowDepthTexture],
-            ],
-            cullFace: gl.BACK,
-            depthTest: gl.LESS,
-        }
-    );
-
-    glance.performDrawCall(gl, floorDrawCall, 2);
-}
 
 const skyDrawCall = glance.createDrawCall(
     gl,
@@ -765,11 +716,11 @@ const shadowDrawCalls = [
     glance.createDrawCall(
         gl,
         shadowShader,
-        floorVAO,
+        floor.floorVAO,
         {
             uniforms: {
                 u_lightXform: (time) => lightXform.getAt(time),
-                u_modelMatrix: () => floorModelMatrix,
+                u_modelMatrix: () => floor.floorModelMatrix,
             },
             cullFace: gl.BACK, // FRONT,
             depthTest: gl.LESS,
@@ -856,6 +807,7 @@ onKeyDown((e) =>
                 cubeVAO: null,
                 drawCall: null,
             }
+            tower.push(newCube);
 
             newCube.cubeModelMatrix = mat4.scale(mat4.fromTranslation(newCube.position), [.4, .4, .4]);
             const cubeNormalMatrix = mat3.fromMat4(newCube.cubeModelMatrix);
@@ -876,7 +828,8 @@ onKeyDown((e) =>
                 cubeShader,
                 newCube.cubeVAO,
                 {
-                    uniforms: {
+                    uniforms: { 
+                        u_modelMatrix: () => mat4.scale(mat4.translate(mat4.identity(), newCube.position), [.4, .4, .4]), 
                         u_lightXform: (time) => lightXform.getAt(time),
                         u_invLightRotation: (time) => invLightRotation.getAt(time),
                         u_viewXform: () => invViewXform.get(),
@@ -892,7 +845,6 @@ onKeyDown((e) =>
                     depthTest: gl.LESS,
                 }
             );
-            tower.push(newCube); 
 
             let startTime = null; // when the animation started
             let duration = 4000; // duration of the animation in milliseconds
@@ -911,7 +863,6 @@ onKeyDown((e) =>
                 if (newCube.position[1] == 1) {
                     requestAnimationFrame(animate);
                 }
-                //updateFloor(-0.3);
             }
 
             // start the animation
@@ -944,30 +895,30 @@ onKeyDown((e) =>
                             startValue = endValue
                         }
                     )
-                    // Animate Floor to move down
-                    let floorStartValue = floorPosition[1];
-                    let floorEndValue = floorPosition[1];
-                    animateProperty(
-                        floorPosition,
-                        1,
-                        floorStartValue,
-                        floorEndValue -0.2, 
-                        100,
-                        () => {
-                        }
-                    )
+                    
                     if (i > 0) {
                         previousCubeEndPosition = [...tower[i - 1].position];
                     }
                 
                     if (i > 0) {
                         const distance = calculateDistance(previousCubeEndPosition, cube.position);
-                
                         if (distance[0] > 0.4 || distance[0] < -0.4) {
-                            location.reload();
+                            // location.reload();
                         }
                     }
                 }
+                // Animate Floor to move down
+                console.log(floor);
+                animateProperty(
+                    floor.position,
+                    1,
+                    floor.position[1],
+                    floor.position[1] - 0.4,
+                    100,
+                    () => {
+                        startValue = endValue
+                    }
+                )
                 count += 1;
                 playerCount.innerHTML = count;
 
@@ -1025,13 +976,13 @@ setRenderLoop((time) =>
         for (const cube of tower) {
             const cubeModelMatrix = mat4.scale(mat4.fromTranslation(cube.position), [.4, .4, .4]);
             if(!matricesEqual(cubeModelMatrix, cube.cubeModelMatrix)) {
-                updateCube(cube);
+                // updateCube(cube);
                 updateShadowDrawCalls();
             }
             glance.performDrawCall(gl, cube.drawCall, time);
         }
-        // glance.performDrawCall(gl, floorDrawCall, time);
+
         // glance.performDrawCall(gl, skyDrawCall, time);
-        updateFloor(floorPosition);
+        glance.performDrawCall(gl, floor.drawCall, time);
     }
 });
