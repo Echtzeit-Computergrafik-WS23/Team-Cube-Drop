@@ -403,7 +403,9 @@ const cubeShader = glance.buildShaderProgram(gl, "cube-shader", solidVertexShade
 
 // Floor -----------------------------------------------------------------------
 
-const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices(1, 4));
+let floorPosition = [0, -.9, 0];
+
+const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices());
 
 const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlaneAttributes(1, 1, { tangents: true }), {
     a_pos: { size: 3, type: gl.FLOAT },
@@ -412,7 +414,7 @@ const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlan
     a_tangent: { size: 3, type: gl.FLOAT },
 });
 
-const floorModelMatrix = mat4.rotate(mat4.fromTranslation([0, -0.5, 0]), Math.PI / 2, [-1, 0, 0]);
+let floorModelMatrix = mat4.rotate(mat4.fromTranslation([0, -0.5, 0]), Math.PI / 2, [-1, 0, 0]);
 const floorNormalMatrix = mat3.fromMat4(floorModelMatrix);
 const floorInstanceAttributes = new Float32Array([...floorModelMatrix, ...floorNormalMatrix]);
 const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
@@ -566,7 +568,7 @@ const invViewXform = new glance.Cached(
     [viewXform]
 );
 
-const rotationSpeed = 0.0003;
+const rotationSpeed = 0.00003;
 const lightTilt = 0.1 ;
 const lightRotation = new glance.TimeSensitive(
     (time) => mat3.fromMat4(mat4.multiply(
@@ -675,6 +677,47 @@ const floorDrawCall = glance.createDrawCall(
         depthTest: gl.LESS,
     }
 );
+
+const updateFloor = (floorPosition) => {
+    let floorModelMatrix = mat4.rotate(mat4.fromTranslation([0, floorPosition[1], 0]), Math.PI / 2, [-1, 0, 0]);
+    const floorNormalMatrix = mat3.fromMat4(floorModelMatrix);
+    const floorInstanceAttributes = new Float32Array([...floorModelMatrix, ...floorNormalMatrix]);
+    const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
+        a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
+        a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
+    });
+    
+    const floorVAO = glance.createVAO(
+        gl,
+        "floor-vao",
+        floorIBO,
+        glance.buildAttributeMap(solidShader, [floorABO, floorIABO]),
+    );
+
+    const floorDrawCall = glance.createDrawCall(
+        gl,
+        solidShader,
+        floorVAO,
+        {
+            uniforms: {
+                u_lightXform: (time) => lightXform.getAt(time),
+                u_invLightRotation: (time) => invLightRotation.getAt(time),
+                u_viewXform: () => invViewXform.get(),
+                u_viewPos: () => vec3.transformMat4(vec3.zero(), viewXform.get()),
+            },
+            textures: [
+                [0, floorTextureDiffuse],
+                [1, floorTextureSpecular],
+                [2, floorTextureNormal],
+                [3, shadowDepthTexture],
+            ],
+            cullFace: gl.BACK,
+            depthTest: gl.LESS,
+        }
+    );
+
+    glance.performDrawCall(gl, floorDrawCall, 2);
+}
 
 const skyDrawCall = glance.createDrawCall(
     gl,
@@ -814,7 +857,6 @@ onKeyDown((e) =>
                 cubeIBO,
                 glance.buildAttributeMap(solidShader, [cubeABO, cubeIABO])
             );
-
             newCube.drawCall = glance.createDrawCall(
                 gl,
                 cubeShader,
@@ -855,6 +897,7 @@ onKeyDown((e) =>
                 if (newCube.position[1] == 1) {
                     requestAnimationFrame(animate);
                 }
+                //updateFloor(-0.3);
             }
 
             // start the animation
@@ -887,6 +930,20 @@ onKeyDown((e) =>
                             startValue = endValue
                         }
                     )
+                    // Animate Floor to move down
+                    let floorStartValue = floorPosition[1];
+                    let floorEndValue = floorPosition[1];
+                    animateProperty(
+                        floorPosition,
+                        1,
+                        floorStartValue,
+                        floorEndValue -0.2, 
+                        100,
+                        () => {
+                        }
+                    )
+                    //TODO add .3 and then move it down
+                    // floorPosition[1] = -.9;
                     if (i > 0) {
                         previousCubeEndPosition = [...tower[i - 1].position];
                     }
@@ -926,7 +983,7 @@ onKeyUp((e) =>
 const framebufferStack = new glance.FramebufferStack();
 
 setRenderLoop((time) =>
-{
+{   
     if (panDelta != 0 || tiltDelta != 0) {
         viewPan += panDelta * .02;
         viewTilt += tiltDelta * .02;
@@ -955,7 +1012,8 @@ setRenderLoop((time) =>
             }
             glance.performDrawCall(gl, cube.drawCall, time);
         }
-        glance.performDrawCall(gl, floorDrawCall, time);
+        // glance.performDrawCall(gl, floorDrawCall, time);
         glance.performDrawCall(gl, skyDrawCall, time);
+        updateFloor(floorPosition);
     }
 });
