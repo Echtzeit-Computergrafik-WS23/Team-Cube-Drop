@@ -15,9 +15,9 @@ let yOffset = 0;
 let count = 0;
 
 // Set the maximum rotation values for the camera.
-const MAX_PAN = Math.PI / 8;
-const MIN_PAN = -Math.PI / 8;
-const MAX_TILT = Math.PI / 8;
+const MAX_PAN  =  Math.PI / 8;
+const MIN_PAN  = -Math.PI / 8;
+const MAX_TILT =  Math.PI / 8;
 const MIN_TILT = -Math.PI / 8;
 
 
@@ -376,7 +376,7 @@ const shadowFragmentShader = `#version 300 es
 const cameraProjection = mat4.perspective(Math.PI / 4, 540 / 1080, 0.1, 14);
 
 // left, right, bottom, top, near, and far clipping planes
-const lightProjection = mat4.ortho(-2, 2, -1, 1.4, -0.5, 5);
+const lightProjection = mat4.ortho(-2, 2, -1, 2, 0.1, 15);
 const textureLightProjection = mat4.multiply(
     mat4.multiply(
         mat4.fromTranslation([0.5, 0.5, 0.5]),
@@ -399,9 +399,9 @@ const solidShader = glance.buildShaderProgram(gl, "floor-shader", solidVertexSha
 });
 
 const cubeShader = glance.buildShaderProgram(gl, "cube-shader", solidVertexShader, solidFragmentShader, {
-    u_ambient: 0.4,
-    u_specular: 0.4,
-    u_shininess: 16,
+    u_ambient: 0.3,
+    u_specular: 0.5,
+    u_shininess: 48,
     u_lightColor: [1, 1, 1],
     u_cameraProjection: cameraProjection,
     u_lightProjection: textureLightProjection,
@@ -593,7 +593,7 @@ floor.drawCall = glance.createDrawCall(
     floor.floorVAO,
     {
         uniforms: {
-            u_modelMatrix: () => mat4.rotate(mat4.translate(mat4.identity(), floor.position), Math.PI / 2, [-1, 0, 0]),
+            u_modelMatrix: () => mat4.scale(mat4.rotate(mat4.translate(mat4.identity(), floor.position), Math.PI / 2, [-1, 0, 0]), [2, 2, 2]),
             u_lightXform: (time) => lightXform.getAt(time),
             u_invLightRotation: (time) => invLightRotation.getAt(time),
             u_viewXform: () => invViewXform.get(),
@@ -626,7 +626,7 @@ let tower = [
         drawCall: null,
     },
     {
-        position: [0, 1 , 0],
+        position: [0, 0.4 , 0],
         cubeModelMatrix: null,
         cubeVAO: null,
         drawCall: null,
@@ -712,23 +712,42 @@ const quadDrawCall = glance.createDrawCall(
 
 // Shadow ----------------------------------------------------------------------
 
-const shadowDrawCalls = [
-    glance.createDrawCall(
-        gl,
-        shadowShader,
-        floor.floorVAO,
-        {
-            uniforms: {
-                u_lightXform: (time) => lightXform.getAt(time),
-                u_modelMatrix: () => floor.floorModelMatrix,
-            },
-            cullFace: gl.BACK, // FRONT,
-            depthTest: gl.LESS,
-        }
-    ),
-];
+let shadowDrawCalls = [];
+
+function createShadowDrawCall(cube) {
+    shadowDrawCalls.push(
+        glance.createDrawCall(
+            gl,
+            shadowShader,
+            cube.cubeVAO,
+            {
+                uniforms: {
+                    u_lightXform: (time) => lightXform.getAt(time),
+                    u_modelMatrix: () => cube.cubeModelMatrix,
+                },
+                cullFace: gl.BACK, // FRONT,
+                depthTest: gl.LESS,
+            }
+        )
+    )
+};
 
 function updateShadowDrawCalls() {
+    shadowDrawCalls.push(
+        glance.createDrawCall(
+            gl,
+            shadowShader,
+            floor.floorVAO,
+            {
+                uniforms: {
+                    u_lightXform: (time) => lightXform.getAt(time),
+                    u_modelMatrix: () => floor.floorModelMatrix,
+                },
+                cullFace: gl.BACK, // FRONT,
+                depthTest: gl.LESS,
+            }
+        )
+    );
     for (let i = 0; i < tower.length; i++) {
         let cube = tower[i]
         shadowDrawCalls.push(
@@ -858,12 +877,15 @@ onKeyDown((e) =>
 
                 // update newCube's position
                 newCube.position[0] = newXPosition;
+                //updateShadowDrawCalls();
 
                 // if newCube's y position is 1, request next frame
                 if (newCube.position[1] == 1) {
                     requestAnimationFrame(animate);
                 }
             }
+
+            createShadowDrawCall(newCube);
 
             // start the animation
             if (newCube.position[1] == 1) {
@@ -903,12 +925,11 @@ onKeyDown((e) =>
                     if (i > 0) {
                         const distance = calculateDistance(previousCubeEndPosition, cube.position);
                         if (distance[0] > 0.4 || distance[0] < -0.4) {
-                            // location.reload();
+                            location.reload();
                         }
                     }
                 }
                 // Animate Floor to move down
-                console.log(floor);
                 animateProperty(
                     floor.position,
                     1,
@@ -922,7 +943,7 @@ onKeyDown((e) =>
                 count += 1;
                 playerCount.innerHTML = count;
 
-                yOffset += 50;
+                yOffset += 30;
                 backgroundImgElement.style.backgroundPosition = `0 ${yOffset}px`;
                 tower.shift();
             }, 500)
@@ -976,13 +997,11 @@ setRenderLoop((time) =>
         for (const cube of tower) {
             const cubeModelMatrix = mat4.scale(mat4.fromTranslation(cube.position), [.4, .4, .4]);
             if(!matricesEqual(cubeModelMatrix, cube.cubeModelMatrix)) {
-                // updateCube(cube);
-                updateShadowDrawCalls();
+                // updateShadowDrawCalls();
             }
             glance.performDrawCall(gl, cube.drawCall, time);
         }
 
-        // glance.performDrawCall(gl, skyDrawCall, time);
         glance.performDrawCall(gl, floor.drawCall, time);
     }
 });
