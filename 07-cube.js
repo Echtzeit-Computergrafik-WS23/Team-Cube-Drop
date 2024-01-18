@@ -1,8 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 // START OF BOILERPLATE CODE ///////////////////////////////////////////////////
 
-console.log('Hello, WebGL!');
-
 // Get the WebGL context
 const canvas = document.getElementById('canvas');
 const body = document.querySelector('body');
@@ -15,10 +13,10 @@ let yOffset = 0;
 let count = 0;
 
 // Set the maximum rotation values for the camera.
-const MAX_PAN  =  Math.PI / 8;
-const MIN_PAN  = -Math.PI / 8;
-const MAX_TILT =  Math.PI / 8;
-const MIN_TILT = -Math.PI / 8;
+const MAX_PAN  =  Math.PI // 8;
+const MIN_PAN  = -Math.PI // 8;
+const MAX_TILT =  Math.PI // 8;
+const MIN_TILT = -Math.PI // 8;
 
 
 // Add mouse move event handlers to the canvas to update the cursor[] array.
@@ -98,14 +96,6 @@ function animateProperty(object, property, startValue, endValue, duration, callb
     requestAnimationFrame(animate);
 }
 
-function matricesEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
-    }
-    return true;
-  }
-
 import glance from './js/glance.js';
 
 // BOILERPLATE END
@@ -133,12 +123,12 @@ const solidVertexShader = `#version 300 es
     uniform mat4 u_cameraProjection;
     uniform vec3 u_viewPos;
     uniform mat4 u_modelMatrix;
+    uniform mat3 u_normalMatrix;
 
     in mat4 a_modelMatrix;
     in vec3 a_pos;
     in vec3 a_normal;
     in vec3 a_tangent;
-    in mat3 a_normalMatrix;
     in vec2 a_texCoord;
 
     out vec3 f_posTangentSpace;
@@ -148,8 +138,8 @@ const solidVertexShader = `#version 300 es
     out vec2 f_texCoord;
 
     void main() {
-        vec3 normal = a_normalMatrix * a_normal;
-        vec3 tangent = a_normalMatrix * a_tangent;
+        vec3 normal = u_normalMatrix * a_normal;
+        vec3 tangent = u_normalMatrix * a_tangent;
         vec3 bitangent = cross(normal, tangent);
         mat3 tbn = transpose(mat3(tangent, bitangent, normal));
 
@@ -545,19 +535,24 @@ const invLightRotation = new glance.TimeSensitive(
 const lightXform = new glance.TimeSensitive(
     (time) => mat4.lookAt(
         // light position
-        vec3.transformMat3([0, 1, -1 ], invLightRotation.getAt(time)),
+        vec3.transformMat3([0, 2, -1 ], invLightRotation.getAt(time)),
         [0, 0, 0],
         [0, 1, 0]
     )
 );
 
+const modelMatrix = (position, scale, rotation = 0) => {
+    return mat4.scale(mat4.rotate(mat4.translate(mat4.identity(), position), rotation, [-1, 0, 0]), scale);
+}
+const normalMatrix = (position, rotation = [0, 0, 0]) => {
+    return mat3.fromMat4(mat4.rotate(mat4.translate(mat4.identity(), position), Math.PI / 2, rotation));
+}
+
 // Floor -----------------------------------------------------------------------
 
 let floor = {
     position: [0, -.9, 0],
-    floorModelMatrix: null,
     floorVAO: null,
-    drawCall: null,
 }
 
 const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices());
@@ -569,19 +564,12 @@ const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlan
     a_tangent: { size: 3, type: gl.FLOAT },
 });
 
-floor.floorModelMatrix = mat4.rotate(mat4.fromTranslation(floor.position), Math.PI / 2, [-1, 0, 0]);
-const floorNormalMatrix = mat3.fromMat4(floor.floorModelMatrix);
-const floorInstanceAttributes = new Float32Array([...floor.floorModelMatrix, ...floorNormalMatrix]);
-const floorIABO = glance.createAttributeBuffer(gl, "floor-iabo", floorInstanceAttributes, {
-    a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-    a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-});
 
 floor.floorVAO = glance.createVAO(
     gl,
     "floor-vao",
     floorIBO,
-    glance.buildAttributeMap(solidShader, [floorABO, floorIABO]),
+    glance.buildAttributeMap(solidShader, [floorABO]),
 );
 const floorTextureDiffuse = await glance.loadTextureNow(gl, "./img/Rockwall_Diffuse.jpg");
 const floorTextureSpecular = await glance.loadTextureNow(gl, "./img/Rockwall_Specular.jpg");
@@ -593,7 +581,8 @@ floor.drawCall = glance.createDrawCall(
     floor.floorVAO,
     {
         uniforms: {
-            u_modelMatrix: () => mat4.scale(mat4.rotate(mat4.translate(mat4.identity(), floor.position), Math.PI / 2, [-1, 0, 0]), [2, 2, 2]),
+            u_modelMatrix: () => modelMatrix(floor.position, [2, 2, 2], Math.PI / 2),
+            u_normalMatrix: () => normalMatrix(floor.position, [-1, 0, 0]),
             u_lightXform: (time) => lightXform.getAt(time),
             u_invLightRotation: (time) => invLightRotation.getAt(time),
             u_viewXform: () => invViewXform.get(),
@@ -615,52 +604,39 @@ floor.drawCall = glance.createDrawCall(
 let tower = [
     {
         position: [0, -0.7, 0],
-        cubeModelMatrix: null,
         cubeVAO: null,
         drawCall: null,
     },
     {
         position: [0, -0.3, 0],
-        cubeModelMatrix: null,
         cubeVAO: null,
         drawCall: null,
     },
     {
         position: [0, 0.4 , 0],
-        cubeModelMatrix: null,
         cubeVAO: null,
         drawCall: null,
     },
 ];
+const cubeScale = [.4, .4, .4];
 
 for (let i = 0; i < tower.length; i++) {
     let cube = tower[i]
-    updateCube(cube);
-}
-
-function updateCube(cube) {
-    cube.cubeModelMatrix = mat4.scale(mat4.fromTranslation(cube.position), [.4, .4, .4]);
-    const cubeNormalMatrix = mat3.fromMat4(cube.cubeModelMatrix);
-    const cubeInstanceAttributes = new Float32Array([...cube.cubeModelMatrix, ...cubeNormalMatrix]);
-    const cubeIABO = glance.createAttributeBuffer(gl, "cube-iabo", cubeInstanceAttributes, {
-        a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-        a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-    });
-
     cube.cubeVAO = glance.createVAO(
         gl,
         "cube-vao",
         cubeIBO,
-        glance.buildAttributeMap(solidShader, [cubeABO, cubeIABO])
+        glance.buildAttributeMap(solidShader, [cubeABO])
     );
-
+    
     const cubeDrawCall = glance.createDrawCall(
         gl,
         cubeShader,
         cube.cubeVAO,
         {
             uniforms: {
-                u_modelMatrix: () => mat4.scale(mat4.translate(mat4.identity(), cube.position), [.4, .4, .4]), 
+                u_modelMatrix: () => mat4.scale(mat4.translate(mat4.identity(), cube.position), [.4, .4, .4]),
+                u_normalMatrix: () => normalMatrix(cube.position),
                 u_lightXform: (time) => lightXform.getAt(time),
                 u_invLightRotation: (time) => invLightRotation.getAt(time),
                 u_viewXform: () => invViewXform.get(),
@@ -714,7 +690,7 @@ const quadDrawCall = glance.createDrawCall(
 
 let shadowDrawCalls = [];
 
-function createShadowDrawCall(cube) {
+for (const cube of tower) {
     shadowDrawCalls.push(
         glance.createDrawCall(
             gl,
@@ -723,51 +699,33 @@ function createShadowDrawCall(cube) {
             {
                 uniforms: {
                     u_lightXform: (time) => lightXform.getAt(time),
-                    u_modelMatrix: () => cube.cubeModelMatrix,
+                    u_modelMatrix: () => modelMatrix(cube.position, cubeScale),
                 },
                 cullFace: gl.BACK, // FRONT,
                 depthTest: gl.LESS,
             }
         )
     )
-};
+}
 
-function updateShadowDrawCalls() {
-    shadowDrawCalls.push(
-        glance.createDrawCall(
-            gl,
-            shadowShader,
-            floor.floorVAO,
-            {
-                uniforms: {
-                    u_lightXform: (time) => lightXform.getAt(time),
-                    u_modelMatrix: () => floor.floorModelMatrix,
-                },
-                cullFace: gl.BACK, // FRONT,
-                depthTest: gl.LESS,
-            }
-        )
-    );
-    for (let i = 0; i < tower.length; i++) {
-        let cube = tower[i]
-        shadowDrawCalls.push(
-            glance.createDrawCall(
-                gl,
-                shadowShader,
-                cube.cubeVAO,
-                {
-                    uniforms: {
-                        u_lightXform: (time) => lightXform.getAt(time),
-                        u_modelMatrix: () => cube.cubeModelMatrix,
-                    },
-                    cullFace: gl.BACK, // FRONT,
-                    depthTest: gl.LESS,
-                }
-            )
-        )
-    }
-};
-updateShadowDrawCalls();
+shadowDrawCalls.push(
+    glance.createDrawCall(
+        gl,
+        shadowShader,
+        floor.floorVAO,
+        {
+            uniforms: {
+                u_lightXform: (time) => lightXform.getAt(time),
+                u_modelMatrix: () => modelMatrix(floor.position, cubeScale),
+            },
+            cullFace: gl.BACK, // FRONT,
+            depthTest: gl.LESS,
+        }
+    )
+)
+
+
+
 
 // =============================================================================
 // System Integration
@@ -822,33 +780,25 @@ onKeyDown((e) =>
         setTimeout(() => {
             const newCube = {
                 position: [0, 1, 0],
-                cubeModelMatrix: null,
                 cubeVAO: null,
                 drawCall: null,
-            }
-            tower.push(newCube);
-
-            newCube.cubeModelMatrix = mat4.scale(mat4.fromTranslation(newCube.position), [.4, .4, .4]);
-            const cubeNormalMatrix = mat3.fromMat4(newCube.cubeModelMatrix);
-            const cubeInstanceAttributes = new Float32Array([...newCube.cubeModelMatrix, ...cubeNormalMatrix]);
-            const cubeIABO = glance.createAttributeBuffer(gl, "cube-iabo", cubeInstanceAttributes, {
-                a_modelMatrix: { size: 4, width: 4, type: gl.FLOAT, divisor: 1 },
-                a_normalMatrix: { size: 3, width: 3, type: gl.FLOAT, divisor: 1 },
-            });
+            };
 
             newCube.cubeVAO = glance.createVAO(
                 gl,
                 "cube-vao",
                 cubeIBO,
-                glance.buildAttributeMap(solidShader, [cubeABO, cubeIABO])
+                glance.buildAttributeMap(solidShader, [cubeABO])
             );
+
             newCube.drawCall = glance.createDrawCall(
                 gl,
                 cubeShader,
                 newCube.cubeVAO,
                 {
-                    uniforms: { 
-                        u_modelMatrix: () => mat4.scale(mat4.translate(mat4.identity(), newCube.position), [.4, .4, .4]), 
+                    uniforms: {
+                        u_modelMatrix: () => modelMatrix(newCube.position, cubeScale),
+                        u_normalMatrix: () => normalMatrix(newCube.position),
                         u_lightXform: (time) => lightXform.getAt(time),
                         u_invLightRotation: (time) => invLightRotation.getAt(time),
                         u_viewXform: () => invViewXform.get(),
@@ -864,6 +814,24 @@ onKeyDown((e) =>
                     depthTest: gl.LESS,
                 }
             );
+
+            shadowDrawCalls.push(
+                glance.createDrawCall(
+                    gl,
+                    shadowShader,
+                    newCube.cubeVAO,
+                    {
+                        uniforms: {
+                            u_modelMatrix: () => modelMatrix(newCube.position, cubeScale),
+                            u_lightXform: (time) => lightXform.getAt(time),
+                        },
+                        cullFace: gl.BACK, // FRONT,
+                        depthTest: gl.LESS,
+                    }
+                )
+            )
+
+            tower.push(newCube);
 
             let startTime = null; // when the animation started
             let duration = 4000; // duration of the animation in milliseconds
@@ -884,8 +852,6 @@ onKeyDown((e) =>
                     requestAnimationFrame(animate);
                 }
             }
-
-            createShadowDrawCall(newCube);
 
             // start the animation
             if (newCube.position[1] == 1) {
@@ -995,10 +961,6 @@ setRenderLoop((time) =>
         glance.performDrawCall(gl, quadDrawCall, time);
     } else {
         for (const cube of tower) {
-            const cubeModelMatrix = mat4.scale(mat4.fromTranslation(cube.position), [.4, .4, .4]);
-            if(!matricesEqual(cubeModelMatrix, cube.cubeModelMatrix)) {
-                // updateShadowDrawCalls();
-            }
             glance.performDrawCall(gl, cube.drawCall, time);
         }
 
