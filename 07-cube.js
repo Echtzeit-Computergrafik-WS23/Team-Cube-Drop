@@ -366,7 +366,7 @@ const shadowFragmentShader = `#version 300 es
 const cameraProjection = mat4.perspective(Math.PI / 4, 540 / 1080, 0.1, 14);
 
 // left, right, bottom, top, near, and far clipping planes
-const lightProjection = mat4.ortho(-2, 2, -1, 2, 0.1, 15);
+const lightProjection = mat4.ortho(-2, 2, -2 , 2, 0.1, 15);
 const textureLightProjection = mat4.multiply(
     mat4.multiply(
         mat4.fromTranslation([0.5, 0.5, 0.5]),
@@ -400,6 +400,34 @@ const cubeShader = glance.buildShaderProgram(gl, "cube-shader", solidVertexShade
     u_texNormal: 2,
     u_texShadow: 3,
 });
+
+// Fence -----------------------------------------------------------------------
+const { attributes: fenceAttr, indices: fenceIdx } = await glance.loadObj("./obj/fence.obj", { tangents: true });
+
+const fenceIBO = glance.createIndexBuffer(gl, fenceIdx);
+
+const fenceABO = glance.createAttributeBuffer(gl, "fence-abo", fenceAttr, {
+    a_pos: { size: 3, type: gl.FLOAT },
+    a_texCoord: { size: 2, type: gl.FLOAT },
+    a_normal: { size: 3, type: gl.FLOAT },
+    a_tangent: { size: 3, type: gl.FLOAT },
+});
+
+const fenceTextureDiffuse = await glance.loadTextureNow(
+    gl,
+    "./img/wood/fence-texture.jpg",
+);
+
+const fenceTextureNormal = await glance.loadTextureNow(
+    gl,
+    "./img/wood/fence_normal.jpg",
+);
+
+const fenceTextureSpecular = await glance.loadTextureNow(
+    gl,
+    "./img/wood/fence-texture.jpg",
+);
+
 
 // Cube ------------------------------------------------------------------------
 
@@ -494,9 +522,9 @@ const shadowFramebuffer = glance.createFramebuffer(gl, "shadow-framebuffer", nul
 // =============================================================================
 
 // Scene State
-let viewDist = 2.4;
-let viewPan = 0;
-let viewTilt = Math.PI / -25;
+let viewDist = 3    ;
+let viewPan = Math.PI;
+let viewTilt = Math.PI / -30;
 let panDelta = 0;
 let tiltDelta = 0;
 
@@ -521,8 +549,8 @@ const invViewXform = new glance.Cached(
     [viewXform]
 );
 
-const rotationSpeed = 0.00003;
-const lightTilt = 0.1 ;
+const rotationSpeed = 0;
+const lightTilt = 0.4 ;
 const lightRotation = new glance.TimeSensitive(
     (time) => mat3.fromMat4(mat4.multiply(
         mat4.fromRotation(-lightTilt, [1, 0, 0]),
@@ -535,7 +563,7 @@ const invLightRotation = new glance.TimeSensitive(
 const lightXform = new glance.TimeSensitive(
     (time) => mat4.lookAt(
         // light position
-        vec3.transformMat3([0, 2, -1 ], invLightRotation.getAt(time)),
+        vec3.transformMat3([-0.2, 1, -1], invLightRotation.getAt(time)),
         [0, 0, 0],
         [0, 1, 0]
     )
@@ -548,6 +576,47 @@ const normalMatrix = (position, rotation = [0, 0, 0]) => {
     return mat3.fromMat4(mat4.rotate(mat4.translate(mat4.identity(), position), Math.PI / 2, rotation));
 }
 
+// Fence -----------------------------------------------------------------------
+
+let fence = {
+    position: [0, -0.9, 5],
+    fenceVAO: null,
+}
+
+fence.fenceVAO = glance.createVAO(
+    gl,
+    "fence-vao",
+    fenceIBO,
+    glance.buildAttributeMap(cubeShader, [fenceABO]),
+);
+
+const fenceDrawCall = glance.createDrawCall(
+    gl,
+    cubeShader,
+    fence.fenceVAO,
+    {
+        uniforms: {
+            u_modelMatrix: () => modelMatrix(fence.position, [1, 1, 1]),
+            u_normalMatrix: () => normalMatrix(fence.position),
+            u_lightXform: (time) => lightXform.getAt(time),
+            u_invLightRotation: (time) => invLightRotation.getAt(time),
+            u_viewXform: () => invViewXform.get(),
+            u_viewPos: () => vec3.transformMat4(vec3.zero(), viewXform.get()),
+        },
+        textures: [
+            [0, fenceTextureDiffuse],
+            [1, fenceTextureSpecular],
+            [2, fenceTextureNormal],
+            [3, shadowDepthTexture],
+        ],
+        cullFace: gl.BACK,
+        depthTest: gl.LESS,
+    }
+);
+
+
+
+
 // Floor -----------------------------------------------------------------------
 
 let floor = {
@@ -557,7 +626,7 @@ let floor = {
 
 const floorIBO = glance.createIndexBuffer(gl, glance.createPlaneIndices());
 
-const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlaneAttributes(1, 1, { tangents: true }), {
+const floorABO = glance.createAttributeBuffer(gl, "floor-abo", glance.createPlaneAttributes(1, 1, { tangents: true, uvScale: 10}), {
     a_pos: { size: 3, type: gl.FLOAT },
     a_normal: { size: 3, type: gl.FLOAT },
     a_texCoord: { size: 2, type: gl.FLOAT },
@@ -571,9 +640,13 @@ floor.floorVAO = glance.createVAO(
     floorIBO,
     glance.buildAttributeMap(solidShader, [floorABO]),
 );
-const floorTextureDiffuse = await glance.loadTextureNow(gl, "./img/Rockwall_Diffuse.jpg");
-const floorTextureSpecular = await glance.loadTextureNow(gl, "./img/Rockwall_Specular.jpg");
-const floorTextureNormal = await glance.loadTextureNow(gl, "./img/Rockwall_Normal.jpg");
+const floorTextureOptions = {
+    wrap: gl.REPEAT,
+}
+
+const floorTextureDiffuse = await glance.loadTextureNow(gl, "./img/floor/Stone_Floor_006_basecolor.jpg", floorTextureOptions);
+const floorTextureSpecular = await glance.loadTextureNow(gl, "./img/floor/Stone_Floor_006_roughness.jpg", floorTextureOptions);
+const floorTextureNormal = await glance.loadTextureNow(gl, "./img/floor/Stone_Floor_006_normal.jpg", floorTextureOptions);
 
 floor.drawCall = glance.createDrawCall(
     gl,
@@ -581,7 +654,7 @@ floor.drawCall = glance.createDrawCall(
     floor.floorVAO,
     {
         uniforms: {
-            u_modelMatrix: () => modelMatrix(floor.position, [2, 2, 2], Math.PI / 2),
+            u_modelMatrix: () => modelMatrix(floor.position, [6, 6, 6], Math.PI / 2),
             u_normalMatrix: () => normalMatrix(floor.position, [-1, 0, 0]),
             u_lightXform: (time) => lightXform.getAt(time),
             u_invLightRotation: (time) => invLightRotation.getAt(time),
@@ -599,7 +672,7 @@ floor.drawCall = glance.createDrawCall(
     }
 );
 
-// Beauty ----------------------------------------------------------------------
+// Tower ----------------------------------------------------------------------
 
 let tower = [
     {
@@ -626,7 +699,7 @@ for (let i = 0; i < tower.length; i++) {
         gl,
         "cube-vao",
         cubeIBO,
-        glance.buildAttributeMap(solidShader, [cubeABO])
+        glance.buildAttributeMap(cubeShader, [cubeABO])
     );
     
     const cubeDrawCall = glance.createDrawCall(
@@ -788,7 +861,7 @@ onKeyDown((e) =>
                 gl,
                 "cube-vao",
                 cubeIBO,
-                glance.buildAttributeMap(solidShader, [cubeABO])
+                glance.buildAttributeMap(cubeShader, [cubeABO])
             );
 
             newCube.drawCall = glance.createDrawCall(
@@ -906,12 +979,24 @@ onKeyDown((e) =>
                         startValue = endValue
                     }
                 )
+                animateProperty(
+                    fence.position,
+                    1,
+                    fence.position[1],
+                    fence.position[1] - 0.4,
+                    100,
+                    () => {
+                        startValue = endValue
+                    }
+                )
                 count += 1;
                 playerCount.innerHTML = count;
 
                 yOffset += 30;
                 backgroundImgElement.style.backgroundPosition = `0 ${yOffset}px`;
-                tower.shift();
+                if(tower.length > 6 ) {
+                    tower.shift(); 
+                }
             }, 500)
         }, 1000)
     } 
@@ -964,6 +1049,7 @@ setRenderLoop((time) =>
             glance.performDrawCall(gl, cube.drawCall, time);
         }
 
+        glance.performDrawCall(gl, fenceDrawCall, time);
         glance.performDrawCall(gl, floor.drawCall, time);
     }
 });
