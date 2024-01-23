@@ -852,7 +852,7 @@ onKeyDown((e) =>
 
         setTimeout(() => {
             const newCube = {
-                position: [0, 1, 0],
+                position: [0, 0.8, 0],
                 cubeVAO: null,
                 drawCall: null,
             };
@@ -921,13 +921,13 @@ onKeyDown((e) =>
                 //updateShadowDrawCalls();
 
                 // if newCube's y position is 1, request next frame
-                if (newCube.position[1] == 1) {
+                if (newCube.position[1] == 0.8) {
                     requestAnimationFrame(animate);
                 }
             }
 
             // start the animation
-            if (newCube.position[1] == 1) {
+            if (newCube.position[1] == 0.8) {
                 requestAnimationFrame(animate);
             }
         
