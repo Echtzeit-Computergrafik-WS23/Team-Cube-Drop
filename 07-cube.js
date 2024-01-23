@@ -13,10 +13,10 @@ let yOffset = -1080;
 let count = 0;
 
 // Set the maximum rotation values for the camera.
-const MAX_PAN  =  Math.PI // 8;
-const MIN_PAN  = -Math.PI // 8;
-const MAX_TILT =  Math.PI // 8;
-const MIN_TILT = -Math.PI // 8;
+const MAX_PAN  =  Math.PI / 8;
+const MIN_PAN  = -Math.PI / 8;
+const MAX_TILT =  Math.PI / 8;
+const MIN_TILT = -Math.PI / 8;
 
 
 // Add mouse move event handlers to the canvas to update the cursor[] array.
@@ -258,52 +258,6 @@ const solidFragmentShader = `#version 300 es
     }
 `;
 
-// Skybox ----------------------------------------------------------------------
-
-const skyVertexShader = `#version 300 es
-    precision highp float;
-
-    uniform mat3 u_lightRotation;
-    uniform mat3 u_viewRotation;
-    uniform mat4 u_cameraProjection;
-
-    in vec3 a_pos;
-
-    out vec3 f_texCoord;
-
-    // This matrix rotates the skybox so that the sun shines down the positive
-    // Z axis instead of its native (unaligned) direction.
-    const mat3 baseRotation = mat3(
-        -0.9497352095434962, -0.0835014389652365, 0.30171268028391895,
-        0.0, 0.9637708963658905, 0.26673143668883115,
-        -0.3130543591029702, 0.2533242369155048, -0.9153271542119822
-    );
-
-    void main() {
-        // Use the local position of the vertex as texture coordinate.
-        f_texCoord = baseRotation * u_lightRotation * a_pos;
-
-        // By setting Z == W, we ensure that the vertex is projected onto the
-        // far plane, which is exactly what we want for the background.
-        vec4 ndcPos = u_cameraProjection * inverse(mat4(u_viewRotation)) * vec4(a_pos, 1.0);
-        gl_Position = ndcPos.xyww;
-    }
-`;
-
-const skyFragmentShader = `#version 300 es
-    precision mediump float;
-
-    uniform samplerCube u_skybox;
-
-    in vec3 f_texCoord;
-
-    out vec4 FragColor;
-
-    void main() {
-        FragColor = texture(u_skybox, f_texCoord);
-    }
-`;
-
 // Debug Quad ------------------------------------------------------------------
 
 const quadVertexShader = `#version 300 es
@@ -456,31 +410,9 @@ const cubeTextureSpecular = await glance.loadTextureNow(
     gl,
     "./img/wooden_box_Roughness.png",
 );
- 
-// Skybox ----------------------------------------------------------------------
-
-const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
-    u_cameraProjection: cameraProjection,
-    u_skybox: 0,
-});
 
 const boxIndex = glance.createBoxIndices(true);
 const boxAttributes = glance.createBoxAttributes(2, { normals: false, texCoords: false, sharedVertices: true });
-const skyIBO = glance.createIndexBuffer(gl, boxIndex);
-const skyABO = glance.createAttributeBuffer(gl, "sky-abo", boxAttributes, {
-    a_pos: { size: 3, type: gl.FLOAT },
-});
-
-const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO));
-
-const skyCubemap = await glance.loadCubemapNow(gl, "sky-texture", [
-    "./img/Skybox_Right.avif",
-    "./img/Skybox_Left.avif",
-    "./img/Skybox_Top.avif",
-    "./img/Skybox_Bottom.avif",
-    "./img/Skybox_Front.avif",
-    "./img/Skybox_Back.avif",
-]);
 
 // Debug Quad ------------------------------------------------------------------
 
@@ -727,24 +659,6 @@ for (let i = 0; i < tower.length; i++) {
     );
     cube.drawCall = cubeDrawCall
 }
-
-
-const skyDrawCall = glance.createDrawCall(
-    gl,
-    skyShader,
-    skyVAO,
-    {
-        uniforms: {
-            u_lightRotation: (time) => lightRotation.getAt(time),
-            u_viewRotation: () => mat3.fromMat4(viewRotation.get()),
-        },
-        textures: [
-            [0, skyCubemap],
-        ],
-        cullFace: gl.NONE,
-        depthTest: gl.LEQUAL,
-    }
-);
 
 const quadDrawCall = glance.createDrawCall(
     gl,
