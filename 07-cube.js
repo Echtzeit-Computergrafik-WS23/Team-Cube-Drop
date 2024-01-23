@@ -13,8 +13,8 @@ let yOffset = -1080;
 let count = 0;
 
 // Set the maximum rotation values for the camera.
-const MAX_PAN  =  Math.PI / 8;
-const MIN_PAN  = -Math.PI / 8;
+const MAX_PAN  =  -Math.PI + Math.PI / 8;
+const MIN_PAN  = -Math.PI -Math.PI / 8;
 const MAX_TILT =  Math.PI / 8;
 const MIN_TILT = -Math.PI / 8;
 
