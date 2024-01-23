@@ -8,7 +8,7 @@ const gl = canvas.getContext('webgl2', {alpha: true});
 
 const playerCount = document.getElementById('playerCount');
 var backgroundImgElement = document.querySelector(".backgroundImg");
-let yOffset = 0;
+let yOffset = -1080;
 
 let count = 0;
 
