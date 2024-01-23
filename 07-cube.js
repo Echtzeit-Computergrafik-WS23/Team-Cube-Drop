@@ -228,7 +228,7 @@ const solidFragmentShader = `#version 300 es
         }
 
         // Determine the bias based on the angle of the light hitting the texture
-        float bias = 0.0;
+        float bias = 0.001;
 
         // Get the closest depth value from light's perspective.
         const vec2 poissonDisk[16] = vec2[](
